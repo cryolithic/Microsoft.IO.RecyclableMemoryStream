@@ -10,7 +10,7 @@ public sealed class RecyclableMemoryStream : MemoryStream, IBufferWriter<byte>
 
 | name | description |
 | --- | --- |
-| [RecyclableMemoryStream](RecyclableMemoryStream/RecyclableMemoryStream.md)(…) | Initializes a new instance of the [`RecyclableMemoryStream`](./RecyclableMemoryStream.md) class. (8 constructors) |
+| [RecyclableMemoryStream](RecyclableMemoryStream/RecyclableMemoryStream.md)(…) | Initializes a new instance of the [`RecyclableMemoryStream`](./RecyclableMemoryStream.md) class. (6 constructors) |
 | override [CanRead](RecyclableMemoryStream/CanRead.md) { get; } | Whether the stream can currently read. |
 | override [CanSeek](RecyclableMemoryStream/CanSeek.md) { get; } | Whether the stream can currently seek. |
 | override [CanTimeout](RecyclableMemoryStream/CanTimeout.md) { get; } | Always false. |
@@ -21,6 +21,7 @@ public sealed class RecyclableMemoryStream : MemoryStream, IBufferWriter<byte>
 | override [Position](RecyclableMemoryStream/Position.md) { get; set; } | Gets the current position in the stream. |
 | [Advance](RecyclableMemoryStream/Advance.md)(…) | Notifies the stream that *count* bytes were written to the buffer returned by [`GetMemory`](./RecyclableMemoryStream/GetMemory.md) or [`GetSpan`](./RecyclableMemoryStream/GetSpan.md). Seeks forward by *count* bytes. |
 | override [Close](RecyclableMemoryStream/Close.md)() | Equivalent to `Dispose`. |
+| override [CopyTo](RecyclableMemoryStream/CopyTo.md)(…) |  |
 | override [CopyToAsync](RecyclableMemoryStream/CopyToAsync.md)(…) | Asynchronously reads all the bytes from the current position in this stream and writes them to another stream. |
 | override [GetBuffer](RecyclableMemoryStream/GetBuffer.md)() | Returns a single buffer containing the contents of the stream. The buffer may be longer than the stream length. |
 | [GetMemory](RecyclableMemoryStream/GetMemory.md)(…) |  |
@@ -28,8 +29,8 @@ public sealed class RecyclableMemoryStream : MemoryStream, IBufferWriter<byte>
 | [GetSpan](RecyclableMemoryStream/GetSpan.md)(…) |  |
 | override [Read](RecyclableMemoryStream/Read.md)(…) | Reads from the current position into the provided buffer. (2 methods) |
 | override [ReadByte](RecyclableMemoryStream/ReadByte.md)() | Reads a single byte from the current position in the stream. |
-| [SafeRead](RecyclableMemoryStream/SafeRead.md)(…) | Reads from the specified position into the provided buffer. (4 methods) |
-| [SafeReadByte](RecyclableMemoryStream/SafeReadByte.md)(…) | Reads a single byte from the specified position in the stream. (2 methods) |
+| [SafeRead](RecyclableMemoryStream/SafeRead.md)(…) | Reads from the specified position into the provided buffer. (2 methods) |
+| [SafeReadByte](RecyclableMemoryStream/SafeReadByte.md)(…) | Reads a single byte from the specified position in the stream. |
 | override [Seek](RecyclableMemoryStream/Seek.md)(…) | Sets the position to the offset from the seek location. |
 | override [SetLength](RecyclableMemoryStream/SetLength.md)(…) | Sets the length of the stream. |
 | override [ToArray](RecyclableMemoryStream/ToArray.md)() | Returns a new array with a copy of the buffer's contents. You should almost certainly be using [`GetBuffer`](./RecyclableMemoryStream/GetBuffer.md) combined with the [`Length`](./RecyclableMemoryStream/Length.md) to access the bytes in this stream. Calling `ToArray` will destroy the benefits of pooled buffers, but it is included for the sake of completeness. |
@@ -38,7 +39,7 @@ public sealed class RecyclableMemoryStream : MemoryStream, IBufferWriter<byte>
 | override [Write](RecyclableMemoryStream/Write.md)(…) | Writes the buffer to the stream. (2 methods) |
 | override [WriteByte](RecyclableMemoryStream/WriteByte.md)(…) | Writes a single byte to the current position in the stream. |
 | override [WriteTo](RecyclableMemoryStream/WriteTo.md)(…) | Synchronously writes this stream's bytes to the argument stream. |
-| [WriteTo](RecyclableMemoryStream/WriteTo.md)(…) | Synchronously writes this stream's bytes, starting at offset, for count bytes, to the argument stream. (5 methods) |
+| [WriteTo](RecyclableMemoryStream/WriteTo.md)(…) | Synchronously writes this stream's bytes, starting at offset, for count bytes, to the argument stream. (4 methods) |
 
 ## Protected Members
 

@@ -1,17 +1,17 @@
-﻿// The MIT License (MIT)
-// 
+// The MIT License (MIT)
+//
 // Copyright (c) 2015-2016 Microsoft
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -89,8 +89,6 @@ namespace Microsoft.IO
     /// </remarks>
     public sealed class RecyclableMemoryStream : MemoryStream, IBufferWriter<byte>
     {
-        private static readonly byte[] emptyArray = new byte[0];
-
         /// <summary>
         /// All of these blocks must be the same size.
         /// </summary>
@@ -100,14 +98,16 @@ namespace Microsoft.IO
 
         private readonly RecyclableMemoryStreamManager memoryManager;
 
-        private readonly string tag;
+        private readonly string? tag;
+
+        private readonly long creationTimestamp;
 
         /// <summary>
         /// This list is used to store buffers once they're replaced by something larger.
         /// This is for the cases where you have users of this class that may hold onto the buffers longer
         /// than they should and you want to prevent race conditions which could corrupt the data.
         /// </summary>
-        private List<byte[]> dirtyBuffers;
+        private List<byte[]>? dirtyBuffers;
 
         private bool disposed;
 
@@ -118,7 +118,7 @@ namespace Microsoft.IO
         /// <remarks>If this field is non-null, it contains the concatenation of the bytes found in the individual
         /// blocks. Once it is created, this (or a larger) largeBuffer will be used for the life of the stream.
         /// </remarks>
-        private byte[] largeBuffer;
+        private byte[]? largeBuffer;
 
         /// <summary>
         /// Unique identifier for this stream across its entire lifetime.
@@ -137,7 +137,7 @@ namespace Microsoft.IO
         /// A temporary identifier for the current usage of this stream.
         /// </summary>
         /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
-        internal string Tag
+        internal string? Tag
         {
             get
             {
@@ -160,16 +160,16 @@ namespace Microsoft.IO
         }
 
         /// <summary>
-        /// Callstack of the constructor. It is only set if <see cref="RecyclableMemoryStreamManager.GenerateCallStacks"/> is true,
+        /// Call stack of the constructor. It is only set if <see cref="RecyclableMemoryStreamManager.Options.GenerateCallStacks"/> is true,
         /// which should only be in debugging situations.
         /// </summary>
-        internal string AllocationStack { get; }
+        internal string? AllocationStack { get; }
 
         /// <summary>
-        /// Callstack of the <see cref="Dispose(bool)"/> call. It is only set if <see cref="RecyclableMemoryStreamManager.GenerateCallStacks"/> is true,
+        /// Call stack of the <see cref="Dispose(bool)"/> call. It is only set if <see cref="RecyclableMemoryStreamManager.Options.GenerateCallStacks"/> is true,
         /// which should only be in debugging situations.
         /// </summary>
-        internal string DisposeStack { get; private set; }
+        internal string? DisposeStack { get; private set; }
 
         #region Constructors
         /// <summary>
@@ -192,7 +192,7 @@ namespace Microsoft.IO
         /// </summary>
         /// <param name="memoryManager">The memory manager.</param>
         /// <param name="tag">A string identifying this stream for logging and debugging purposes.</param>
-        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, string tag)
+        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, string? tag)
             : this(memoryManager, Guid.NewGuid(), tag, 0, null) { }
 
         /// <summary>
@@ -201,36 +201,17 @@ namespace Microsoft.IO
         /// <param name="memoryManager">The memory manager.</param>
         /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
         /// <param name="tag">A string identifying this stream for logging and debugging purposes.</param>
-        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, Guid id, string tag)
+        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, Guid id, string? tag)
             : this(memoryManager, id, tag, 0, null) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RecyclableMemoryStream"/> class.
         /// </summary>
-        /// <param name="memoryManager">The memory manager</param>
-        /// <param name="tag">A string identifying this stream for logging and debugging purposes.</param>
-        /// <param name="requestedSize">The initial requested size to prevent future allocations.</param>
-        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, string tag, int requestedSize)
-            : this(memoryManager, Guid.NewGuid(), tag, requestedSize, null) { }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RecyclableMemoryStream"/> class.
-        /// </summary>
         /// <param name="memoryManager">The memory manager.</param>
         /// <param name="tag">A string identifying this stream for logging and debugging purposes.</param>
         /// <param name="requestedSize">The initial requested size to prevent future allocations.</param>
-        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, string tag, long requestedSize)
+        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, string? tag, long requestedSize)
             : this(memoryManager, Guid.NewGuid(), tag, requestedSize, null) { }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RecyclableMemoryStream"/> class.
-        /// </summary>
-        /// <param name="memoryManager">The memory manager.</param>
-        /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
-        /// <param name="tag">A string identifying this stream for logging and debugging purposes.</param>
-        /// <param name="requestedSize">The initial requested size to prevent future allocations.</param>
-        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, Guid id, string tag, int requestedSize)
-            : this(memoryManager, id, tag, (long)requestedSize) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RecyclableMemoryStream"/> class.
@@ -239,7 +220,7 @@ namespace Microsoft.IO
         /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
         /// <param name="tag">A string identifying this stream for logging and debugging purposes.</param>
         /// <param name="requestedSize">The initial requested size to prevent future allocations.</param>
-        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, Guid id, string tag, long requestedSize)
+        public RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, Guid id, string? tag, long requestedSize)
             : this(memoryManager, id, tag, requestedSize, null) { }
 
         /// <summary>
@@ -250,15 +231,16 @@ namespace Microsoft.IO
         /// <param name="tag">A string identifying this stream for logging and debugging purposes.</param>
         /// <param name="requestedSize">The initial requested size to prevent future allocations.</param>
         /// <param name="initialLargeBuffer">An initial buffer to use. This buffer will be owned by the stream and returned to the memory manager upon Dispose.</param>
-        internal RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, Guid id, string tag, long requestedSize, byte[] initialLargeBuffer)
-            : base(emptyArray)
+        internal RecyclableMemoryStream(RecyclableMemoryStreamManager memoryManager, Guid id, string? tag, long requestedSize, byte[]? initialLargeBuffer)
+            : base([])
         {
             this.memoryManager = memoryManager;
             this.id = id;
             this.tag = tag;
-            this.blocks = new List<byte[]>();
+            this.blocks = [];
+            this.creationTimestamp = Stopwatch.GetTimestamp();
 
-            var actualRequestedSize = Math.Max(requestedSize, this.memoryManager.BlockSize);
+            var actualRequestedSize = Math.Max(requestedSize, this.memoryManager.options.BlockSize);
 
             if (initialLargeBuffer == null)
             {
@@ -269,7 +251,7 @@ namespace Microsoft.IO
                 this.largeBuffer = initialLargeBuffer;
             }
 
-            if (this.memoryManager.GenerateCallStacks)
+            if (this.memoryManager.options.GenerateCallStacks)
             {
                 this.AllocationStack = Environment.StackTrace;
             }
@@ -297,8 +279,8 @@ namespace Microsoft.IO
         {
             if (this.disposed)
             {
-                string doubleDisposeStack = null;
-                if (this.memoryManager.GenerateCallStacks)
+                string? doubleDisposeStack = null;
+                if (this.memoryManager.options.GenerateCallStacks)
                 {
                     doubleDisposeStack = Environment.StackTrace;
                 }
@@ -308,13 +290,14 @@ namespace Microsoft.IO
             }
 
             this.disposed = true;
+            var lifetime = TimeSpan.FromTicks((Stopwatch.GetTimestamp() - this.creationTimestamp) * TimeSpan.TicksPerSecond / Stopwatch.Frequency);
 
-            if (this.memoryManager.GenerateCallStacks)
+            if (this.memoryManager.options.GenerateCallStacks)
             {
                 this.DisposeStack = Environment.StackTrace;
             }
 
-            this.memoryManager.ReportStreamDisposed(this.id, this.tag, this.AllocationStack, this.DisposeStack);
+            this.memoryManager.ReportStreamDisposed(this.id, this.tag, lifetime, this.AllocationStack, this.DisposeStack);
 
             if (disposing)
             {
@@ -398,10 +381,10 @@ namespace Microsoft.IO
                     return this.largeBuffer.Length;
                 }
 
-                long size = (long)this.blocks.Count * this.memoryManager.BlockSize;
+                long size = (long)this.blocks.Count * this.memoryManager.options.BlockSize;
                 if (size > int.MaxValue)
                 {
-                    throw new InvalidOperationException($"{nameof(Capacity)} is larger than int.MaxValue. Use {nameof(Capacity64)} instead.");
+                    throw new InvalidOperationException($"{nameof(this.Capacity)} is larger than int.MaxValue. Use {nameof(this.Capacity64)} instead.");
                 }
                 return (int)size;
             }
@@ -424,7 +407,7 @@ namespace Microsoft.IO
                     return this.largeBuffer.Length;
                 }
 
-                long size = (long)this.blocks.Count * this.memoryManager.BlockSize;
+                long size = (long)this.blocks.Count * this.memoryManager.options.BlockSize;
                 return size;
             }
             set
@@ -538,7 +521,7 @@ namespace Microsoft.IO
             this.InternalRead(newBuffer, 0, (int)this.length, 0);
             this.largeBuffer = newBuffer;
 
-            if (this.blocks.Count > 0 && this.memoryManager.AggressiveBufferReturn)
+            if (this.blocks.Count > 0 && this.memoryManager.options.AggressiveBufferReturn)
             {
                 this.memoryManager.ReturnBlocks(this.blocks, this.id, this.tag);
                 this.blocks.Clear();
@@ -546,6 +529,14 @@ namespace Microsoft.IO
 
             return this.largeBuffer;
         }
+
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+        /// <inheritdoc/>
+        public override void CopyTo(Stream destination, int bufferSize)
+        {
+            this.WriteTo(destination, this.position, this.length - this.position);
+        }
+#endif
 
         /// <summary>Asynchronously reads all the bytes from the current position in this stream and writes them to another stream.</summary>
         /// <param name="destination">The stream to which the contents of the current stream will be copied.</param>
@@ -586,7 +577,7 @@ namespace Microsoft.IO
                 {
                     if (this.blocks.Count == 1)
                     {
-                        AssertLengthIsSmall();
+                        this.AssertLengthIsSmall();
                         return destination.WriteAsync(this.blocks[0], (int)startPos, (int)count, cancellationToken);
                     }
                     else
@@ -596,7 +587,7 @@ namespace Microsoft.IO
                 }
                 else
                 {
-                    AssertLengthIsSmall();
+                    this.AssertLengthIsSmall();
                     return destination.WriteAsync(this.largeBuffer, (int)startPos, (int)count, cancellationToken);
                 }
             }
@@ -608,8 +599,9 @@ namespace Microsoft.IO
                 var currentOffset = blockAndOffset.Offset;
                 while (bytesRemaining > 0)
                 {
-                    int amountToCopy = (int)Math.Min(blocks[currentBlock].Length - currentOffset, bytesRemaining);
-                    await destination.WriteAsync(blocks[currentBlock], currentOffset, amountToCopy, cancellationToken);
+                    byte[] block = blocks[currentBlock];
+                    int amountToCopy = (int)Math.Min(block.Length - currentOffset, bytesRemaining);
+                    await destination.WriteAsync(block, currentOffset, amountToCopy, cancellationToken);
                     bytesRemaining -= amountToCopy;
                     ++currentBlock;
                     currentOffset = 0;
@@ -617,7 +609,7 @@ namespace Microsoft.IO
             }
         }
 
-        private byte[] bufferWriterTempBuffer;
+        private byte[]? bufferWriterTempBuffer;
 
         /// <summary>
         /// Notifies the stream that <paramref name="count"/> bytes were written to the buffer returned by <see cref="GetMemory(int)"/> or <see cref="GetSpan(int)"/>.
@@ -638,7 +630,7 @@ namespace Microsoft.IO
                 throw new ArgumentOutOfRangeException(nameof(count), $"{nameof(count)} must be non-negative.");
             }
 
-            byte[] buffer = this.bufferWriterTempBuffer;
+            byte[]? buffer = this.bufferWriterTempBuffer;
             if (buffer != null)
             {
                 if (count > buffer.Length)
@@ -653,7 +645,7 @@ namespace Microsoft.IO
             else
             {
                 long bufferSize = this.largeBuffer == null
-                    ? this.memoryManager.BlockSize - this.GetBlockAndRelativeOffset(this.position).Offset
+                    ? this.memoryManager.options.BlockSize - this.GetBlockAndRelativeOffset(this.position).Offset
                     : this.largeBuffer.Length - this.position;
 
                 if (count > bufferSize)
@@ -668,7 +660,7 @@ namespace Microsoft.IO
 
         private void ReturnTempBuffer(byte[] buffer)
         {
-            if (buffer.Length == this.memoryManager.BlockSize)
+            if (buffer.Length == this.memoryManager.options.BlockSize)
             {
                 this.memoryManager.ReturnBlock(buffer, this.id, this.tag);
             }
@@ -719,13 +711,13 @@ namespace Microsoft.IO
             }
 
             BlockAndOffset blockAndOffset = this.GetBlockAndRelativeOffset(this.position);
-            int remainingBytesInBlock = this.MemoryManager.BlockSize - blockAndOffset.Offset;
+            int remainingBytesInBlock = this.MemoryManager.options.BlockSize - blockAndOffset.Offset;
             if (remainingBytesInBlock >= minimumBufferSize)
             {
-                return new ArraySegment<byte>(this.blocks[blockAndOffset.Block], blockAndOffset.Offset, this.MemoryManager.BlockSize - blockAndOffset.Offset);
+                return new ArraySegment<byte>(this.blocks[blockAndOffset.Block], blockAndOffset.Offset, this.MemoryManager.options.BlockSize - blockAndOffset.Offset);
             }
 
-            this.bufferWriterTempBuffer = minimumBufferSize > this.memoryManager.BlockSize ?
+            this.bufferWriterTempBuffer = minimumBufferSize > this.memoryManager.options.BlockSize ?
                 this.memoryManager.GetLargeBuffer(minimumBufferSize, this.id, this.tag) :
                 this.memoryManager.GetBlock();
 
@@ -744,13 +736,13 @@ namespace Microsoft.IO
 
             if (this.largeBuffer != null)
             {
-                AssertLengthIsSmall();
+                this.AssertLengthIsSmall();
                 return new ReadOnlySequence<byte>(this.largeBuffer, 0, (int)this.length);
             }
 
             if (this.blocks.Count == 1)
             {
-                AssertLengthIsSmall();
+                this.AssertLengthIsSmall();
                 return new ReadOnlySequence<byte>(this.blocks[0], 0, (int)this.length);
             }
 
@@ -767,12 +759,12 @@ namespace Microsoft.IO
 
         private sealed class BlockSegment : ReadOnlySequenceSegment<byte>
         {
-            public BlockSegment(Memory<byte> memory) => Memory = memory;
+            public BlockSegment(Memory<byte> memory) => this.Memory = memory;
 
             public BlockSegment Append(Memory<byte> memory)
             {
-                var nextSegment = new BlockSegment(memory) { RunningIndex = RunningIndex + Memory.Length };
-                Next = nextSegment;
+                var nextSegment = new BlockSegment(memory) { RunningIndex = this.RunningIndex + this.Memory.Length };
+                this.Next = nextSegment;
                 return nextSegment;
             }
         }
@@ -798,7 +790,7 @@ namespace Microsoft.IO
             {
             }
 
-#if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             buffer = ArraySegment<byte>.Empty;
 #else
             buffer = new ArraySegment<byte>();
@@ -820,10 +812,10 @@ namespace Microsoft.IO
         {
             this.CheckDisposed();
 
-            string stack = this.memoryManager.GenerateCallStacks ? Environment.StackTrace : null;
+            string? stack = this.memoryManager.options.GenerateCallStacks ? Environment.StackTrace : null;
             this.memoryManager.ReportStreamToArray(this.id, this.tag, stack, this.length);
 
-            if (this.memoryManager.ThrowExceptionOnToArray)
+            if (this.memoryManager.options.ThrowExceptionOnToArray)
             {
                 throw new NotSupportedException("The underlying RecyclableMemoryStreamManager is configured to not allow calls to ToArray.");
             }
@@ -851,31 +843,6 @@ namespace Microsoft.IO
         public override int Read(byte[] buffer, int offset, int count)
         {
             return this.SafeRead(buffer, offset, count, ref this.position);
-        }
-
-        /// <summary>
-        /// Reads from the specified position into the provided buffer.
-        /// </summary>
-        /// <param name="buffer">Destination buffer.</param>
-        /// <param name="offset">Offset into buffer at which to start placing the read bytes.</param>
-        /// <param name="count">Number of bytes to read.</param>
-        /// <param name="streamPosition">Position in the stream to start reading from.</param>
-        /// <returns>The number of bytes read.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> or <paramref name="count"/> is less than 0.</exception>
-        /// <exception cref="ArgumentException"><paramref name="offset"/> subtracted from the buffer length is less than <paramref name="count"/>.</exception>
-        /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
-        /// <exception cref="InvalidOperationException">Stream position is beyond <c>int.MaxValue</c>.</exception>
-        public int SafeRead(byte[] buffer, int offset, int count, ref int streamPosition)
-        {
-            long longPosition = streamPosition;
-            var retVal = this.SafeRead(buffer, offset, count, ref longPosition);
-            if (longPosition > int.MaxValue)
-            {
-                throw new InvalidOperationException("Stream position is beyond int.MaxValue. Use SafeRead(byte[], int, int, ref long) override.");
-            }
-            streamPosition = (int)longPosition;
-            return retVal;
         }
 
         /// <summary>
@@ -924,33 +891,13 @@ namespace Microsoft.IO
         /// <param name="buffer">Destination buffer.</param>
         /// <returns>The number of bytes read.</returns>
         /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
-#if NETSTANDARD2_0 || NET462
+#if NETSTANDARD2_0
         public int Read(Span<byte> buffer)
 #else
         public override int Read(Span<byte> buffer)
 #endif
         {
             return this.SafeRead(buffer, ref this.position);
-        }
-
-        /// <summary>
-        /// Reads from the specified position into the provided buffer.
-        /// </summary>
-        /// <param name="buffer">Destination buffer.</param>
-        /// <param name="streamPosition">Position in the stream to start reading from.</param>
-        /// <returns>The number of bytes read.</returns>
-        /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
-        /// <exception cref="InvalidOperationException">Stream position is beyond <c>int.MaxValue</c>.</exception>
-        public int SafeRead(Span<byte> buffer, ref int streamPosition)
-        {
-            long longPosition = streamPosition;
-            int retVal = this.SafeRead(buffer, ref longPosition);
-            if (longPosition > int.MaxValue)
-            {
-                throw new InvalidOperationException("Stream position is beyond int.MaxValue. Use SafeRead(Span<byte>, ref long) override.");
-            }
-            streamPosition = (int)longPosition;
-            return retVal;
         }
 
         /// <summary>
@@ -1003,8 +950,8 @@ namespace Microsoft.IO
                 throw new ArgumentException($"{nameof(count)} must be greater than {nameof(buffer)}.{nameof(buffer.Length)} - {nameof(offset)}.");
             }
 
-            int blockSize = this.memoryManager.BlockSize;
-            long end = (long)this.position + count;
+            int blockSize = this.memoryManager.options.BlockSize;
+            long end = this.position + count;
 
             this.EnsureCapacity(end);
 
@@ -1044,7 +991,7 @@ namespace Microsoft.IO
         /// <param name="source">Source buffer.</param>
         /// <exception cref="ArgumentNullException">buffer is null.</exception>
         /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
-#if NETSTANDARD2_0 || NET462
+#if NETSTANDARD2_0
         public void Write(ReadOnlySpan<byte> source)
 #else
         public override void Write(ReadOnlySpan<byte> source)
@@ -1053,8 +1000,8 @@ namespace Microsoft.IO
         {
             this.CheckDisposed();
 
-            int blockSize = this.memoryManager.BlockSize;
-            long end = (long)this.position + source.Length;
+            int blockSize = this.memoryManager.options.BlockSize;
+            long end = this.position + source.Length;
 
             this.EnsureCapacity(end);
 
@@ -1110,20 +1057,20 @@ namespace Microsoft.IO
         {
             this.CheckDisposed();
 
-            long end = (long)this.position + 1;
+            long end = this.position + 1;
 
             if (this.largeBuffer == null)
             {
-                var blockSize = this.memoryManager.BlockSize;
+                var blockSize = this.memoryManager.options.BlockSize;
 
-                var block = (int)(this.position / blockSize);
+                var block = (int)Math.DivRem(this.position, blockSize, out var index);
 
                 if (block >= this.blocks.Count)
                 {
                     this.EnsureCapacity(end);
                 }
 
-                this.blocks[block][this.position % blockSize] = value;
+                this.blocks[block][index] = value;
             }
             else
             {
@@ -1159,25 +1106,6 @@ namespace Microsoft.IO
         /// <param name="streamPosition">The position in the stream to read from.</param>
         /// <returns>The byte at the current position, or -1 if the position is at the end of the stream.</returns>
         /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
-        /// <exception cref="InvalidOperationException">Stream position is beyond <c>int.MaxValue</c>.</exception>
-        public int SafeReadByte(ref int streamPosition)
-        {
-            long longPosition = streamPosition;
-            int retVal = this.SafeReadByte(ref longPosition);
-            if (longPosition > int.MaxValue)
-            {
-                throw new InvalidOperationException("Stream position is beyond int.MaxValue. Use SafeReadByte(ref long) override.");
-            }
-            streamPosition = (int)longPosition;
-            return retVal;
-        }
-
-        /// <summary>
-        /// Reads a single byte from the specified position in the stream.
-        /// </summary>
-        /// <param name="streamPosition">The position in the stream to read from.</param>
-        /// <returns>The byte at the current position, or -1 if the position is at the end of the stream.</returns>
-        /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
         public int SafeReadByte(ref long streamPosition)
         {
             this.CheckDisposed();
@@ -1202,7 +1130,7 @@ namespace Microsoft.IO
         /// <summary>
         /// Sets the length of the stream.
         /// </summary>
-        /// <exception cref="ArgumentOutOfRangeException">value is negative or larger than <see cref="RecyclableMemoryStreamManager.MaximumStreamCapacity"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">value is negative or larger than <see cref="RecyclableMemoryStreamManager.Options.MaximumStreamCapacity"/>.</exception>
         /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
         public override void SetLength(long value)
         {
@@ -1228,28 +1156,19 @@ namespace Microsoft.IO
         /// <param name="loc">From where.</param>
         /// <returns>The new position.</returns>
         /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is larger than <see cref="RecyclableMemoryStreamManager.MaximumStreamCapacity"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is larger than <see cref="RecyclableMemoryStreamManager.Options.MaximumStreamCapacity"/>.</exception>
         /// <exception cref="ArgumentException">Invalid seek origin.</exception>
         /// <exception cref="IOException">Attempt to set negative position.</exception>
         public override long Seek(long offset, SeekOrigin loc)
         {
             this.CheckDisposed();
-
-            long newPosition;
-            switch (loc)
+            long newPosition = loc switch
             {
-                case SeekOrigin.Begin:
-                    newPosition = offset;
-                    break;
-                case SeekOrigin.Current:
-                    newPosition = offset + this.position;
-                    break;
-                case SeekOrigin.End:
-                    newPosition = offset + this.length;
-                    break;
-                default:
-                    throw new ArgumentException("Invalid seek origin.", nameof(loc));
-            }
+                SeekOrigin.Begin => offset,
+                SeekOrigin.Current => offset + this.position,
+                SeekOrigin.End => offset + this.length,
+                _ => throw new ArgumentException("Invalid seek origin.", nameof(loc)),
+            };
             if (newPosition < 0)
             {
                 throw new IOException("Seek before beginning.");
@@ -1268,22 +1187,6 @@ namespace Microsoft.IO
         public override void WriteTo(Stream stream)
         {
             this.WriteTo(stream, 0, this.length);
-        }
-
-        /// <summary>
-        /// Synchronously writes this stream's bytes, starting at offset, for count bytes, to the argument stream.
-        /// </summary>
-        /// <param name="stream">Destination stream.</param>
-        /// <param name="offset">Offset in source.</param>
-        /// <param name="count">Number of bytes to write.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="offset"/> is less than 0, or <paramref name="offset"/> + <paramref name="count"/> is beyond  this <paramref name="stream"/>'s length.
-        /// </exception>
-        /// <exception cref="ObjectDisposedException">Object has been disposed.</exception>
-        public void WriteTo(Stream stream, int offset, int count)
-        {
-            this.WriteTo(stream, (long)offset, (long)count);
         }
 
         /// <summary>
@@ -1321,8 +1224,9 @@ namespace Microsoft.IO
 
                 while (bytesRemaining > 0)
                 {
-                    int amountToCopy = (int)Math.Min((long)this.blocks[currentBlock].Length - currentOffset, bytesRemaining);
-                    stream.Write(this.blocks[currentBlock], currentOffset, amountToCopy);
+                    byte[] block = this.blocks[currentBlock];
+                    int amountToCopy = (int)Math.Min((long)block.Length - currentOffset, bytesRemaining);
+                    stream.Write(block, currentOffset, amountToCopy);
 
                     bytesRemaining -= amountToCopy;
 
@@ -1403,7 +1307,7 @@ namespace Microsoft.IO
 
             if (this.largeBuffer == null)
             {
-                var blockAndOffset = GetBlockAndRelativeOffset(offset);
+                var blockAndOffset = this.GetBlockAndRelativeOffset(offset);
                 long bytesRemaining = count;
                 int currentBlock = blockAndOffset.Block;
                 int currentOffset = blockAndOffset.Offset;
@@ -1411,8 +1315,9 @@ namespace Microsoft.IO
 
                 while (bytesRemaining > 0)
                 {
-                    int amountToCopy = (int)Math.Min((long)this.blocks[currentBlock].Length - currentOffset, bytesRemaining);
-                    Buffer.BlockCopy(this.blocks[currentBlock], currentOffset, buffer, currentTargetOffset, amountToCopy);
+                    byte[] block = this.blocks[currentBlock];
+                    int amountToCopy = (int)Math.Min((long)block.Length - currentOffset, bytesRemaining);
+                    Buffer.BlockCopy(block, currentOffset, buffer, currentTargetOffset, amountToCopy);
 
                     bytesRemaining -= amountToCopy;
 
@@ -1423,7 +1328,7 @@ namespace Microsoft.IO
             }
             else
             {
-                AssertLengthIsSmall();
+                this.AssertLengthIsSmall();
                 Buffer.BlockCopy(this.largeBuffer, (int)offset, buffer, targetOffset, (int)count);
             }
         }
@@ -1460,13 +1365,14 @@ namespace Microsoft.IO
             {
                 var blockAndOffset = this.GetBlockAndRelativeOffset(fromPosition);
                 int bytesWritten = 0;
-                int bytesRemaining = (int)Math.Min((long)count, this.length - fromPosition);
+                int bytesRemaining = (int)Math.Min(count, this.length - fromPosition);
 
                 while (bytesRemaining > 0)
                 {
-                    amountToCopy = Math.Min(this.blocks[blockAndOffset.Block].Length - blockAndOffset.Offset,
+                    byte[] block = this.blocks[blockAndOffset.Block];
+                    amountToCopy = Math.Min(block.Length - blockAndOffset.Offset,
                                                 bytesRemaining);
-                    Buffer.BlockCopy(this.blocks[blockAndOffset.Block], blockAndOffset.Offset, buffer,
+                    Buffer.BlockCopy(block, blockAndOffset.Offset, buffer,
                                      bytesWritten + offset, amountToCopy);
 
                     bytesWritten += amountToCopy;
@@ -1477,7 +1383,7 @@ namespace Microsoft.IO
                 }
                 return bytesWritten;
             }
-            amountToCopy = (int)Math.Min((long)count, this.length - fromPosition);
+            amountToCopy = (int)Math.Min(count, this.length - fromPosition);
             Buffer.BlockCopy(this.largeBuffer, (int)fromPosition, buffer, offset, amountToCopy);
             return amountToCopy;
         }
@@ -1499,9 +1405,10 @@ namespace Microsoft.IO
 
                 while (bytesRemaining > 0)
                 {
-                    amountToCopy = Math.Min(this.blocks[blockAndOffset.Block].Length - blockAndOffset.Offset,
+                    byte[] block = this.blocks[blockAndOffset.Block];
+                    amountToCopy = Math.Min(block.Length - blockAndOffset.Offset,
                                             bytesRemaining);
-                    this.blocks[blockAndOffset.Block].AsSpan(blockAndOffset.Offset, amountToCopy)
+                    block.AsSpan(blockAndOffset.Offset, amountToCopy)
                         .CopyTo(buffer.Slice(bytesWritten));
 
                     bytesWritten += amountToCopy;
@@ -1512,39 +1419,32 @@ namespace Microsoft.IO
                 }
                 return bytesWritten;
             }
-            amountToCopy = (int)Math.Min((long)buffer.Length, this.length - fromPosition);
+            amountToCopy = (int)Math.Min(buffer.Length, this.length - fromPosition);
             this.largeBuffer.AsSpan((int)fromPosition, amountToCopy).CopyTo(buffer);
             return amountToCopy;
         }
 
-        private struct BlockAndOffset
+        private struct BlockAndOffset(int block, int offset)
         {
-            public int Block;
-            public int Offset;
-
-            public BlockAndOffset(int block, int offset)
-            {
-                this.Block = block;
-                this.Offset = offset;
-            }
+            public int Block = block;
+            public int Offset = offset;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private BlockAndOffset GetBlockAndRelativeOffset(long offset)
         {
-            var blockSize = this.memoryManager.BlockSize;
-            int blockIndex = (int)(offset / blockSize);
-            int offsetIndex = (int)(offset % blockSize);
-            return new BlockAndOffset(blockIndex, offsetIndex);
+            var blockSize = this.memoryManager.options.BlockSize;
+            int blockIndex = (int)Math.DivRem(offset, blockSize, out long offsetIndex);
+            return new BlockAndOffset(blockIndex, (int)offsetIndex);
         }
 
         private void EnsureCapacity(long newCapacity)
         {
-            if (newCapacity > this.memoryManager.MaximumStreamCapacity && this.memoryManager.MaximumStreamCapacity > 0)
+            if (newCapacity > this.memoryManager.options.MaximumStreamCapacity && this.memoryManager.options.MaximumStreamCapacity > 0)
             {
                 this.memoryManager.ReportStreamOverCapacity(this.id, this.tag, newCapacity, this.AllocationStack);
 
-                throw new OutOfMemoryException($"Requested capacity is too large: {newCapacity}. Limit is {this.memoryManager.MaximumStreamCapacity}.");
+                throw new OutOfMemoryException($"Requested capacity is too large: {newCapacity}. Limit is {this.memoryManager.options.MaximumStreamCapacity}.");
             }
 
             if (this.largeBuffer != null)
@@ -1560,8 +1460,8 @@ namespace Microsoft.IO
             }
             else
             {
-                // Let's save some re-allocs of the blocks list
-                var blocksRequired = (newCapacity / this.memoryManager.BlockSize) + 1;
+                // Let's save some re-allocation of the blocks list
+                var blocksRequired = (newCapacity / this.memoryManager.options.BlockSize) + 1;
                 if (this.blocks.Capacity < blocksRequired)
                 {
                     this.blocks.Capacity = (int)blocksRequired;
@@ -1578,18 +1478,17 @@ namespace Microsoft.IO
         /// </summary>
         private void ReleaseLargeBuffer()
         {
-            if (this.memoryManager.AggressiveBufferReturn)
+            Debug.Assert(this.largeBuffer != null);
+
+            if (this.memoryManager.options.AggressiveBufferReturn)
             {
-                this.memoryManager.ReturnLargeBuffer(this.largeBuffer, this.id, this.tag);
+                this.memoryManager.ReturnLargeBuffer(this.largeBuffer!, this.id, this.tag);
             }
             else
             {
-                if (this.dirtyBuffers == null)
-                {
-                    // We most likely will only ever need space for one
-                    this.dirtyBuffers = new List<byte[]>(1);
-                }
-                this.dirtyBuffers.Add(this.largeBuffer);
+                // We most likely will only ever need space for one
+                this.dirtyBuffers ??= new List<byte[]>(1);
+                this.dirtyBuffers.Add(this.largeBuffer!);
             }
 
             this.largeBuffer = null;
@@ -1600,6 +1499,6 @@ namespace Microsoft.IO
         {
             Debug.Assert(this.length <= Int32.MaxValue, "this.length was assumed to be <= Int32.MaxValue, but was larger.");
         }
-#endregion
+        #endregion
     }
 }

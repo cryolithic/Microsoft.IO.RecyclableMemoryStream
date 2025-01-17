@@ -1,17 +1,23 @@
 # RecyclableMemoryStreamManager.StreamDisposedEventArgs constructor
 
-Initializes a new instance of the [`StreamDisposedEventArgs`](../RecyclableMemoryStreamManager.StreamDisposedEventArgs.md) class.
+Arguments for the [`StreamDisposed`](../RecyclableMemoryStreamManager/StreamDisposed.md) event.
 
 ```csharp
-public StreamDisposedEventArgs(Guid guid, string tag, string allocationStack, string disposeStack)
+public StreamDisposedEventArgs(Guid guid, string? tag, TimeSpan lifetime, string? allocationStack, 
+    string? disposeStack)
 ```
 
 | parameter | description |
 | --- | --- |
 | guid | Unique ID of the stream. |
 | tag | Tag of the stream. |
+| lifetime | Lifetime of the stream |
 | allocationStack | Stack of original allocation. |
 | disposeStack | Dispose stack. |
+
+## Remarks
+
+Initializes a new instance of the [`StreamDisposedEventArgs`](../RecyclableMemoryStreamManager.StreamDisposedEventArgs.md) class.
 
 ## See Also
 

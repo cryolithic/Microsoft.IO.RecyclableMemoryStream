@@ -1,216 +1,182 @@
-﻿namespace Microsoft.IO
+namespace Microsoft.IO
 {
     using System;
 
     public sealed partial class RecyclableMemoryStreamManager
     {
         /// <summary>
-        /// Arguments for the StreamCreated event.
+        /// Arguments for the <see cref="StreamCreated"/> event.
         /// </summary>
-        public sealed class StreamCreatedEventArgs : EventArgs
+        /// <remarks>
+        /// Initializes a new instance of the <see cref="StreamCreatedEventArgs"/> class.
+        /// </remarks>
+        /// <param name="guid">Unique ID of the stream.</param>
+        /// <param name="tag">Tag of the stream.</param>
+        /// <param name="requestedSize">The requested stream size.</param>
+        /// <param name="actualSize">The actual stream size.</param>
+        public sealed class StreamCreatedEventArgs(Guid guid, string? tag, long requestedSize, long actualSize) : EventArgs
         {
             /// <summary>
             /// Unique ID for the stream.
             /// </summary>
-            public Guid Id { get; }
+            public Guid Id { get; } = guid;
 
             /// <summary>
             /// Optional Tag for the event.
             /// </summary>
-            public string Tag { get; }
+            public string? Tag { get; } = tag;
 
             /// <summary>
             /// Requested stream size.
             /// </summary>
-            public long RequestedSize { get; }
+            public long RequestedSize { get; } = requestedSize;
 
             /// <summary>
             /// Actual stream size.
             /// </summary>
-            public long ActualSize { get; }
-
-            /// <summary>
-            /// Initializes a new instance of the <see cref="StreamCreatedEventArgs"/> class.
-            /// </summary>
-            /// <param name="guid">Unique ID of the stream.</param>
-            /// <param name="tag">Tag of the stream.</param>
-            /// <param name="requestedSize">The requested stream size.</param>
-            /// <param name="actualSize">The actual stream size.</param>
-            public StreamCreatedEventArgs(Guid guid, string tag, long requestedSize, long actualSize)
-            {
-                this.Id = guid;
-                this.Tag = tag;
-                this.RequestedSize = requestedSize;
-                this.ActualSize = actualSize;
-            }
+            public long ActualSize { get; } = actualSize;
         }
 
         /// <summary>
-        /// Arguments for the StreamDisposed event.
+        /// Arguments for the <see cref="StreamDisposed"/> event.
         /// </summary>
-        public sealed class StreamDisposedEventArgs : EventArgs
+        /// <remarks>
+        /// Initializes a new instance of the <see cref="StreamDisposedEventArgs"/> class.
+        /// </remarks>
+        /// <param name="guid">Unique ID of the stream.</param>
+        /// <param name="tag">Tag of the stream.</param>
+        /// <param name="lifetime">Lifetime of the stream</param>
+        /// <param name="allocationStack">Stack of original allocation.</param>
+        /// <param name="disposeStack">Dispose stack.</param>
+        public sealed class StreamDisposedEventArgs(Guid guid, string? tag, TimeSpan lifetime, string? allocationStack, string? disposeStack) : EventArgs
         {
             /// <summary>
             /// Unique ID for the stream.
             /// </summary>
-            public Guid Id { get; }
+            public Guid Id { get; } = guid;
 
             /// <summary>
             /// Optional Tag for the event.
             /// </summary>
-            public string Tag { get; }
+            public string? Tag { get; } = tag;
 
             /// <summary>
             /// Stack where the stream was allocated.
             /// </summary>
-            public string AllocationStack { get; }
+            public string? AllocationStack { get; } = allocationStack;
 
             /// <summary>
             /// Stack where stream was disposed.
             /// </summary>
-            public string DisposeStack { get; }
+            public string? DisposeStack { get; } = disposeStack;
 
             /// <summary>
-            /// Initializes a new instance of the <see cref="StreamDisposedEventArgs"/> class.
+            /// Lifetime of the stream.
             /// </summary>
-            /// <param name="guid">Unique ID of the stream.</param>
-            /// <param name="tag">Tag of the stream.</param>
-            /// <param name="allocationStack">Stack of original allocation.</param>
-            /// <param name="disposeStack">Dispose stack.</param>
-            public StreamDisposedEventArgs(Guid guid, string tag, string allocationStack, string disposeStack)
-            {
-                this.Id = guid;
-                this.Tag = tag;
-                this.AllocationStack = allocationStack;
-                this.DisposeStack = disposeStack;
-            }
+            public TimeSpan Lifetime { get; } = lifetime;
         }
 
         /// <summary>
-        /// Arguments for the StreamDoubleDisposed event.
+        /// Arguments for the <see cref="StreamDoubleDisposed"/> event.
         /// </summary>
-        public sealed class StreamDoubleDisposedEventArgs : EventArgs
+        /// <remarks>
+        /// Initializes a new instance of the <see cref="StreamDoubleDisposedEventArgs"/> class.
+        /// </remarks>
+        /// <param name="guid">Unique ID of the stream.</param>
+        /// <param name="tag">Tag of the stream.</param>
+        /// <param name="allocationStack">Stack of original allocation.</param>
+        /// <param name="disposeStack1">First dispose stack.</param>
+        /// <param name="disposeStack2">Second dispose stack.</param>
+        public sealed class StreamDoubleDisposedEventArgs(Guid guid, string? tag, string? allocationStack, string? disposeStack1, string? disposeStack2) : EventArgs
         {
             /// <summary>
             /// Unique ID for the stream.
             /// </summary>
-            public Guid Id { get; }
+            public Guid Id { get; } = guid;
 
             /// <summary>
             /// Optional Tag for the event.
             /// </summary>
-            public string Tag { get; }
+            public string? Tag { get; } = tag;
 
             /// <summary>
             /// Stack where the stream was allocated.
             /// </summary>
-            public string AllocationStack { get; }
+            public string? AllocationStack { get; } = allocationStack;
 
             /// <summary>
             /// First dispose stack.
             /// </summary>
-            public string DisposeStack1 { get; }
+            public string? DisposeStack1 { get; } = disposeStack1;
 
             /// <summary>
             /// Second dispose stack.
             /// </summary>
-            public string DisposeStack2 { get; }
-
-            /// <summary>
-            /// Initializes a new instance of the <see cref="StreamDoubleDisposedEventArgs"/> class.
-            /// </summary>
-            /// <param name="guid">Unique ID of the stream.</param>
-            /// <param name="tag">Tag of the stream.</param>
-            /// <param name="allocationStack">Stack of original allocation.</param>
-            /// <param name="disposeStack1">First dispose stack.</param>
-            /// <param name="disposeStack2">Second dispose stack.</param>
-            public StreamDoubleDisposedEventArgs(Guid guid, string tag, string allocationStack, string disposeStack1, string disposeStack2)
-            {
-                this.Id = guid;
-                this.Tag = tag;
-                this.AllocationStack = allocationStack;
-                this.DisposeStack1 = disposeStack1;
-                this.DisposeStack2 = disposeStack2;
-            }
+            public string? DisposeStack2 { get; } = disposeStack2;
         }
 
         /// <summary>
-        /// Arguments for the StreamFinalized event.
+        /// Arguments for the <see cref="StreamFinalized"/> event.
         /// </summary>
-        public sealed class StreamFinalizedEventArgs : EventArgs
+        /// <remarks>
+        /// Initializes a new instance of the <see cref="StreamFinalizedEventArgs"/> class.
+        /// </remarks>
+        /// <param name="guid">Unique ID of the stream.</param>
+        /// <param name="tag">Tag of the stream.</param>
+        /// <param name="allocationStack">Stack of original allocation.</param>
+        public sealed class StreamFinalizedEventArgs(Guid guid, string? tag, string? allocationStack) : EventArgs
         {
             /// <summary>
             /// Unique ID for the stream.
             /// </summary>
-            public Guid Id { get; }
+            public Guid Id { get; } = guid;
 
             /// <summary>
             /// Optional Tag for the event.
             /// </summary>
-            public string Tag { get; }
+            public string? Tag { get; } = tag;
 
             /// <summary>
             /// Stack where the stream was allocated.
             /// </summary>
-            public string AllocationStack { get; }
-
-            /// <summary>
-            /// Initializes a new instance of the <see cref="StreamFinalizedEventArgs"/> class.
-            /// </summary>
-            /// <param name="guid">Unique ID of the stream.</param>
-            /// <param name="tag">Tag of the stream.</param>
-            /// <param name="allocationStack">Stack of original allocation.</param>
-            public StreamFinalizedEventArgs(Guid guid, string tag, string allocationStack)
-            {
-                this.Id = guid;
-                this.Tag = tag;
-                this.AllocationStack = allocationStack;
-            }
+            public string? AllocationStack { get; } = allocationStack;
         }
 
         /// <summary>
-        /// Arguments for the StreamConvertedToArray event.
+        /// Arguments for the <see cref="StreamConvertedToArray"/> event.
         /// </summary>
-        public sealed class StreamConvertedToArrayEventArgs : EventArgs
+        /// <remarks>
+        /// Initializes a new instance of the <see cref="StreamConvertedToArrayEventArgs"/> class.
+        /// </remarks>
+        /// <param name="guid">Unique ID of the stream.</param>
+        /// <param name="tag">Tag of the stream.</param>
+        /// <param name="stack">Stack of ToArray call.</param>
+        /// <param name="length">Length of stream.</param>
+        public sealed class StreamConvertedToArrayEventArgs(Guid guid, string? tag, string? stack, long length) : EventArgs
         {
             /// <summary>
             /// Unique ID for the stream.
             /// </summary>
-            public Guid Id { get; }
+            public Guid Id { get; } = guid;
 
             /// <summary>
             /// Optional Tag for the event.
             /// </summary>
-            public string Tag { get; }
+            public string? Tag { get; } = tag;
 
             /// <summary>
             /// Stack where ToArray was called.
             /// </summary>
-            public string Stack { get; }
+            public string? Stack { get; } = stack;
 
             /// <summary>
             /// Length of stack.
             /// </summary>
-            public long Length { get; }
-
-            /// <summary>
-            /// Initializes a new instance of the <see cref="StreamConvertedToArrayEventArgs"/> class.
-            /// </summary>
-            /// <param name="guid">Unique ID of the stream.</param>
-            /// <param name="tag">Tag of the stream.</param>
-            /// <param name="stack">Stack of ToArray call.</param>
-            /// <param name="length">Length of stream.</param>
-            public StreamConvertedToArrayEventArgs(Guid guid, string tag, string stack, long length)
-            {
-                this.Id = guid;
-                this.Tag = tag;
-                this.Stack = stack;
-                this.Length = length;
-            }
+            public long Length { get; } = length;
         }
 
         /// <summary>
-        /// Arguments for the StreamOverCapacity event.
+        /// Arguments for the <see cref="StreamOverCapacity"/> event.
         /// </summary>
         public sealed class StreamOverCapacityEventArgs : EventArgs
         {
@@ -222,12 +188,12 @@
             /// <summary>
             /// Optional Tag for the event.
             /// </summary>
-            public string Tag { get; }
+            public string? Tag { get; }
 
             /// <summary>
             /// Original allocation stack.
             /// </summary>
-            public string AllocationStack { get; }
+            public string? AllocationStack { get; }
 
             /// <summary>
             /// Requested capacity.
@@ -247,7 +213,7 @@
             /// <param name="requestedCapacity">Requested capacity.</param>
             /// <param name="maximumCapacity">Maximum stream capacity of the manager.</param>
             /// <param name="allocationStack">Original allocation stack.</param>
-            internal StreamOverCapacityEventArgs(Guid guid, string tag, long requestedCapacity, long maximumCapacity, string allocationStack)
+            internal StreamOverCapacityEventArgs(Guid guid, string? tag, long requestedCapacity, long maximumCapacity, string? allocationStack)
             {
                 this.Id = guid;
                 this.Tag = tag;
@@ -258,7 +224,7 @@
         }
 
         /// <summary>
-        /// Arguments for the BlockCreated event.
+        /// Arguments for the <see cref="BlockCreated"/> event.
         /// </summary>
         public sealed class BlockCreatedEventArgs : EventArgs
         {
@@ -278,7 +244,7 @@
         }
 
         /// <summary>
-        /// Arguments for the LargeBufferCreated events.
+        /// Arguments for the <see cref="LargeBufferCreated"/> events.
         /// </summary>
         public sealed class LargeBufferCreatedEventArgs : EventArgs
         {
@@ -290,7 +256,7 @@
             /// <summary>
             /// Optional Tag for the event.
             /// </summary>
-            public string Tag { get; }
+            public string? Tag { get; }
 
             /// <summary>
             /// Whether the buffer was satisfied from the pool or not.
@@ -308,10 +274,10 @@
             public long LargePoolInUse { get; }
 
             /// <summary>
-            /// If the buffer was not satisfied from the pool, and GenerateCallstacks is turned on, then.
-            /// this will contain the callstack of the allocation request.
+            /// If the buffer was not satisfied from the pool, and <see cref="Options.GenerateCallStacks"/> is turned on, then.
+            /// this will contain the call stack of the allocation request.
             /// </summary>
-            public string CallStack { get; }
+            public string? CallStack { get; }
 
             /// <summary>
             /// Initializes a new instance of the <see cref="LargeBufferCreatedEventArgs"/> class.
@@ -321,8 +287,8 @@
             /// <param name="requiredSize">Required size of the new buffer.</param>
             /// <param name="largePoolInUse">How many bytes from the large pool are currently in use.</param>
             /// <param name="pooled">Whether the buffer was satisfied from the pool or not.</param>
-            /// <param name="callStack">Callstack of the allocation, if it wasn't pooled.</param>
-            internal LargeBufferCreatedEventArgs(Guid guid, string tag, long requiredSize, long largePoolInUse, bool pooled, string callStack)
+            /// <param name="callStack">Call stack of the allocation, if it wasn't pooled.</param>
+            internal LargeBufferCreatedEventArgs(Guid guid, string? tag, long requiredSize, long largePoolInUse, bool pooled, string? callStack)
             {
                 this.RequiredSize = requiredSize;
                 this.LargePoolInUse = largePoolInUse;
@@ -334,7 +300,7 @@
         }
 
         /// <summary>
-        /// Arguments for the BufferDiscarded event.
+        /// Arguments for the <see cref="BufferDiscarded"/> event.
         /// </summary>
         public sealed class BufferDiscardedEventArgs : EventArgs
         {
@@ -346,7 +312,7 @@
             /// <summary>
             /// Optional Tag for the event.
             /// </summary>
-            public string Tag { get; }
+            public string? Tag { get; }
 
             /// <summary>
             /// Type of the buffer.
@@ -365,7 +331,7 @@
             /// <param name="tag">Tag of the stream.</param>
             /// <param name="bufferType">Type of buffer being discarded.</param>
             /// <param name="reason">The reason for the discard.</param>
-            internal BufferDiscardedEventArgs(Guid guid, string tag, Events.MemoryStreamBufferType bufferType, Events.MemoryStreamDiscardReason reason)
+            internal BufferDiscardedEventArgs(Guid guid, string? tag, Events.MemoryStreamBufferType bufferType, Events.MemoryStreamDiscardReason reason)
             {
                 this.Id = guid;
                 this.Tag = tag;
@@ -375,68 +341,55 @@
         }
 
         /// <summary>
-        /// Arguments for the StreamLength event.
+        /// Arguments for the <see cref="StreamLength"/> event.
         /// </summary>
-        public sealed class StreamLengthEventArgs : EventArgs
+        /// <remarks>
+        /// Initializes a new instance of the <see cref="StreamLengthEventArgs"/> class.
+        /// </remarks>
+        /// <param name="length">Length of the strength.</param>
+        public sealed class StreamLengthEventArgs(long length) : EventArgs
         {
             /// <summary>
             /// Length of the stream.
             /// </summary>
-            public long Length { get; }
-
-            /// <summary>
-            /// Initializes a new instance of the <see cref="StreamLengthEventArgs"/> class.
-            /// </summary>
-            /// <param name="length">Length of the strength.</param>
-            public StreamLengthEventArgs(long length)
-            {
-                this.Length = length;
-            }
+            public long Length { get; } = length;
         }
 
         /// <summary>
-        /// Arguments for the UsageReport event.
+        /// Arguments for the <see cref="UsageReport"/> event.
         /// </summary>
-        public sealed class UsageReportEventArgs : EventArgs
+        /// <remarks>
+        /// Initializes a new instance of the <see cref="UsageReportEventArgs"/> class.
+        /// </remarks>
+        /// <param name="smallPoolInUseBytes">Bytes from the small pool currently in use.</param>
+        /// <param name="smallPoolFreeBytes">Bytes from the small pool currently available.</param>
+        /// <param name="largePoolInUseBytes">Bytes from the large pool currently in use.</param>
+        /// <param name="largePoolFreeBytes">Bytes from the large pool currently available.</param>
+        public sealed class UsageReportEventArgs(
+            long smallPoolInUseBytes,
+            long smallPoolFreeBytes,
+            long largePoolInUseBytes,
+            long largePoolFreeBytes) : EventArgs
         {
             /// <summary>
             /// Bytes from the small pool currently in use.
             /// </summary>
-            public long SmallPoolInUseBytes { get; }
+            public long SmallPoolInUseBytes { get; } = smallPoolInUseBytes;
 
             /// <summary>
             /// Bytes from the small pool currently available.
             /// </summary>
-            public long SmallPoolFreeBytes { get; }
+            public long SmallPoolFreeBytes { get; } = smallPoolFreeBytes;
 
             /// <summary>
             /// Bytes from the large pool currently in use.
             /// </summary>
-            public long LargePoolInUseBytes { get; }
+            public long LargePoolInUseBytes { get; } = largePoolInUseBytes;
 
             /// <summary>
             /// Bytes from the large pool currently available.
             /// </summary>
-            public long LargePoolFreeBytes { get; }
-
-            /// <summary>
-            /// Initializes a new instance of the <see cref="UsageReportEventArgs"/> class.
-            /// </summary>
-            /// <param name="smallPoolInUseBytes">Bytes from the small pool currently in use.</param>
-            /// <param name="smallPoolFreeBytes">Bytes from the small pool currently available.</param>
-            /// <param name="largePoolInUseBytes">Bytes from the large pool currently in use.</param>
-            /// <param name="largePoolFreeBytes">Bytes from the large pool currently available.</param>
-            public UsageReportEventArgs(
-                long smallPoolInUseBytes, 
-                long smallPoolFreeBytes, 
-                long largePoolInUseBytes, 
-                long largePoolFreeBytes)
-            {
-                this.SmallPoolInUseBytes = smallPoolInUseBytes;
-                this.SmallPoolFreeBytes = smallPoolFreeBytes;
-                this.LargePoolInUseBytes = largePoolInUseBytes;
-                this.LargePoolFreeBytes = largePoolFreeBytes;
-            }
+            public long LargePoolFreeBytes { get; } = largePoolFreeBytes;
         }
     }
 }

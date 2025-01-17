@@ -1,19 +1,29 @@
 # RecyclableMemoryStreamManager.StreamFinalizedEventArgs class
 
-Arguments for the StreamFinalized event.
+Arguments for the [`StreamFinalized`](./RecyclableMemoryStreamManager/StreamFinalized.md) event.
 
 ```csharp
 public sealed class StreamFinalizedEventArgs : EventArgs
 ```
 
+| parameter | description |
+| --- | --- |
+| guid | Unique ID of the stream. |
+| tag | Tag of the stream. |
+| allocationStack | Stack of original allocation. |
+
 ## Public Members
 
 | name | description |
 | --- | --- |
-| [StreamFinalizedEventArgs](RecyclableMemoryStreamManager.StreamFinalizedEventArgs/StreamFinalizedEventArgs.md)(…) | Initializes a new instance of the [`StreamFinalizedEventArgs`](./RecyclableMemoryStreamManager.StreamFinalizedEventArgs.md) class. |
+| [StreamFinalizedEventArgs](RecyclableMemoryStreamManager.StreamFinalizedEventArgs/StreamFinalizedEventArgs.md)(…) | Arguments for the [`StreamFinalized`](./RecyclableMemoryStreamManager/StreamFinalized.md) event. |
 | [AllocationStack](RecyclableMemoryStreamManager.StreamFinalizedEventArgs/AllocationStack.md) { get; } | Stack where the stream was allocated. |
 | [Id](RecyclableMemoryStreamManager.StreamFinalizedEventArgs/Id.md) { get; } | Unique ID for the stream. |
 | [Tag](RecyclableMemoryStreamManager.StreamFinalizedEventArgs/Tag.md) { get; } | Optional Tag for the event. |
+
+## Remarks
+
+Initializes a new instance of the [`StreamFinalizedEventArgs`](./RecyclableMemoryStreamManager.StreamFinalizedEventArgs.md) class.
 
 ## See Also
 

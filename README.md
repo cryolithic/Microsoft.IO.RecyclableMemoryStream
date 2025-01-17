@@ -45,8 +45,12 @@ Supported build targets in v2.0 are: net462, netstandard2.0, netstandard2.1, and
 ## Testing
 
 A minimum of .NET 5.0 is required for executing the unit tests. Requirements:
-- NUnit test adaptor (VS Extension)
+- NUnit test adapter (VS Extension)
 - Be sure to set the default processor architecture for tests to x64 (or the giant allocation test will fail)
+
+## Benchmark tests
+
+The results are available [here](https://microsoft.github.io/Microsoft.IO.RecyclableMemoryStream/dev/bench/)
 
 ## Change Log
 
@@ -59,7 +63,7 @@ Read the change log [here](https://github.com/microsoft/Microsoft.IO.RecyclableM
 The `RecyclableMemoryStreamManager` class maintains two separate pools of objects:
 
 1. **Small Pool** - Holds small buffers (of configurable size). Used by default for all normal read/write operations. Multiple small buffers are chained together in the `RecyclableMemoryStream` class and abstracted into a single stream.
-2. **Large Pool** - Holds large buffers, which are only used when you must have a single, contiguous buffer, such as when you plan to call `GetBuffer()`. It is possible to create streams larger than is possible to be represented by a single buffer because of .NET's array size limits.
+2. **Large Pool** - Holds large buffers, which are only used when you must have a single, contiguous buffer, such as when you plan to call `GetBuffer()`. The `GetBuffer()` method is still bounded by .NET array size limits. If you need a larger stream than this, do not use this method.
 
 A `RecyclableMemoryStream` starts out by using a small buffer, chaining additional ones as the stream capacity grows. Should you ever call `GetBuffer()` and the length is greater than a single small buffer's capacity, then the small buffers are converted to a single large buffer. You can also request a stream with an initial capacity; if that capacity is larger than the small pool block size, multiple blocks will be chained unless you call an overload with `asContiguousBuffer` set to true, in which case a single large buffer will be assigned from the start. If you request a capacity larger than the maximum poolable size, you will still get a stream back, but the buffers will not be pooled. (Note: This is not referring to the maximum array size. You can limit the poolable buffer sizes in `RecyclableMemoryStreamManager`)
 
@@ -77,6 +81,7 @@ Buffers are created, on demand, the first time they are requested and nothing su
 If you forget to call a stream's `Dispose` method, this could cause a memory leak. To help you prevent this, each stream has a finalizer that will be called by the CLR once there are no more references to the stream. This finalizer will raise an event or log a message about the leaked stream.
 
 Note that for performance reasons, the buffers are not ever pre-initialized or zeroed-out. It is your responsibility to ensure their contents are valid and safe to use buffer recycling.
+If you want to avoid accidental data leakage, you can set `ZeroOutBuffer` to true. This will zero out the buffers on allocation and before returning them to the pool. Be aware of the performance implications.
 
 ## Usage
 
@@ -98,8 +103,8 @@ class Program
     }
 }
 ```
-
-Note that `RecyclableMemoryStreamManager` should be declared once and it will live for the entire process lifetime. It is perfectly fine to use multiple pools if you desire, especially if you want to configure them differently.
+| **_IMPORTANT_** | Note that `RecyclableMemoryStreamManager` should be declared once and it will live for the entire process lifetime. It is perfectly fine to use multiple pools if you desire, especially if you want to configure them differently.|
+|-|:-|
 
 To facilitate easier debugging, you can optionally provide a string `tag`, which serves as a human-readable identifier for the stream. This can be something like “ClassName.MethodName”, but it can be whatever you want. Each stream also has a GUID to provide absolute identity if needed, but the `tag` is usually sufficient.
 
@@ -120,25 +125,27 @@ var stream = manager.GetStream("Program.Main", sourceBuffer,
 You can also change the parameters of the pool itself:
 
 ```csharp
-int blockSize = 1024;
-int largeBufferMultiple = 1024 * 1024;
-int maxBufferSize = 16 * largeBufferMultiple;
+var options = new RecyclableMemoryStreamManager.Options()
+{
+    BlockSize = 1024,
+    LargeBufferMultiple = 1024 * 1024,
+    MaximumBufferSize = 16 * 1024 * 1024,
+    GenerateCallStacks = true,
+    AggressiveBufferReturn = true,
+    MaximumLargePoolFreeBytes = 16 * 1024 * 1024 * 4,
+    MaximumSmallPoolFreeBytes = 100 * 1024,
+};
 
-var manager = new RecyclableMemoryStreamManager(blockSize, 
-                                                largeBufferMultiple, 
-                                                maxBufferSize);
-
-manager.GenerateCallStacks = true;
-manager.AggressiveBufferReturn = true;
-manager.MaximumFreeLargePoolBytes = maxBufferSize * 4;
-manager.MaximumFreeSmallPoolBytes = 100 * blockSize;
+var manager = new RecyclableMemoryStreamManager(options);
 ```
+
+You should usually set at least `BlockSize`, `LargeBufferMultiple`, `MaximumBufferSize`, `MaximumLargePoolFreeBytes`, and `MaximumSmallPoolFreeBytes` because their appropriate values are highly dependent on the application.
 
 ### Usage Guidelines
 
 While this library strives to be very general and not impose too many restraints on how you use it, its purpose is to reduce the cost of garbage collections incurred by frequent large allocations. Thus, there are some general guidelines for usage that may be useful to you:
 
-1. Set the `blockSize`, `largeBufferMultiple`, `maxBufferSize`, `MaximumFreeLargePoolBytes` and `MaximumFreeSmallPoolBytes` properties to reasonable values for your application and resource requirements. **Important!**: If you do not set `MaximumFreeLargePoolBytes` and `MaximumFreeSmallPoolBytes` there is the possibility for unbounded memory growth!
+1. Set the `BlockSize`, `LargeBufferMultiple`, `MaximumBufferSize`, `MaximumLargePoolFreeBytes` and `MaximumSmallPoolFreeBytes` properties to reasonable values for your application and resource requirements. **Important!**: If you do not set `MaximumFreeLargePoolBytes` and `MaximumFreeSmallPoolBytes` there is the possibility for unbounded memory growth!
 2. Always dispose of each stream exactly once.
 3. Most applications should not call `ToArray` and should avoid calling `GetBuffer` if possible. Instead, use `GetReadOnlySequence` for reading and the `IBufferWriter` methods `GetSpan`\\`GetMemory` with `Advance` for writing. There are also miscellaneous `CopyTo` and `WriteTo` methods that may be convenient. The point is to avoid creating unnecessary GC pressure where possible.
 4. Experiment to find the appropriate settings for your scenario.
@@ -160,7 +167,7 @@ When configuring the options, consider questions such as these:
 ```csharp
 var bigInt = BigInteger.Parse("123456789013374299100987654321");
 
-using (var stream = manager.GetStream() as RecyclableMemoryStream)
+using (var stream = manager.GetStream())
 {
     Span<byte> buffer = stream.GetSpan(bigInt.GetByteCount());
     bigInt.TryWriteBytes(buffer, out int bytesWritten);
@@ -173,7 +180,7 @@ using (var stream = manager.GetStream() as RecyclableMemoryStream)
 `GetReadOnlySequence` returns a [ReadOnlySequence<byte>](https://docs.microsoft.com/en-us/dotnet/api/system.buffers.readonlysequence-1?view=netstandard-2.1) that can be used for zero-copy stream processing. For example, hashing the contents of a stream: 
 
 ```csharp
-using (var stream = manager.GetStream() as RecyclableMemoryStream)
+using (var stream = manager.GetStream())
 using (var sha256Hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
 {
     foreach (var memory in stream.GetReadOnlySequence())
@@ -277,3 +284,7 @@ Read the API documentation [here](https://github.com/microsoft/Microsoft.IO.Recy
 ## License
 
 This library is released under the [MIT license](https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream/blob/master/LICENSE).
+
+## Support
+
+Check the support policy [here](SUPPORT.md)

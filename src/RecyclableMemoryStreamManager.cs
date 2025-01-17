@@ -1,4 +1,4 @@
-﻿// ---------------------------------------------------------------------
+// ---------------------------------------------------------------------
 // Copyright (c) 2015-2016 Microsoft
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,7 +25,6 @@ namespace Microsoft.IO
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
-    using System.IO;
     using System.Runtime.CompilerServices;
     using System.Threading;
 
@@ -39,7 +38,7 @@ namespace Microsoft.IO
     ///</para>
     ///<para>
     /// For scenarios that need to call <see cref="RecyclableMemoryStream.GetBuffer"/>, the large pool contains buffers of various sizes, all
-    /// multiples/exponentials of <see cref="LargeBufferMultiple"/> (1 MB by default). They are split by size to avoid overly-wasteful buffer
+    /// multiples/exponentials of <see cref="Options.LargeBufferMultiple"/> (1 MB by default). They are split by size to avoid overly-wasteful buffer
     /// usage. There should be far fewer 8 MB buffers than 1 MB buffers, for example.
     /// </para>
     /// </remarks>
@@ -81,177 +80,12 @@ namespace Microsoft.IO
         private long smallPoolFreeSize;
         private long smallPoolInUseSize;
 
-        /// <summary>
-        /// Initializes the memory manager with the default block/buffer specifications. This pool may have unbounded growth unless you modify <see cref="MaximumFreeSmallPoolBytes"/> and <see cref="MaximumFreeLargePoolBytes"/>.
-        /// </summary>
-        public RecyclableMemoryStreamManager()
-            : this(DefaultBlockSize, DefaultLargeBufferMultiple, DefaultMaximumBufferSize, false, DefaultMaxSmallPoolFreeBytes, DefaultMaxLargePoolFreeBytes) { }
+        internal readonly Options options;
 
         /// <summary>
-        /// Initializes the memory manager with the default block/buffer specifications and maximum free bytes specifications.
+        /// Settings for controlling the behavior of RecyclableMemoryStream
         /// </summary>
-        /// <param name="maximumSmallPoolFreeBytes">Maximum number of bytes to keep available in the small pool before future buffers get dropped for garbage collection</param>
-        /// <param name="maximumLargePoolFreeBytes">Maximum number of bytes to keep available in the large pool before future buffers get dropped for garbage collection</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="maximumSmallPoolFreeBytes"/> is negative, or <paramref name="maximumLargePoolFreeBytes"/> is negative.</exception>
-        public RecyclableMemoryStreamManager(long maximumSmallPoolFreeBytes, long maximumLargePoolFreeBytes)
-            :this(DefaultBlockSize, DefaultLargeBufferMultiple, DefaultMaximumBufferSize, useExponentialLargeBuffer:false, maximumSmallPoolFreeBytes, maximumLargePoolFreeBytes)
-        {
-        }
-
-        /// <summary>
-        /// Initializes the memory manager with the given block requiredSize. This pool may have unbounded growth unless you modify <see cref="MaximumFreeSmallPoolBytes"/> and <see cref="MaximumFreeLargePoolBytes"/>.
-        /// </summary>
-        /// <param name="blockSize">Size of each block that is pooled. Must be > 0.</param>
-        /// <param name="largeBufferMultiple">Each large buffer will be a multiple of this value.</param>
-        /// <param name="maximumBufferSize">Buffers larger than this are not pooled</param>
-        /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="blockSize"/> is not a positive number,
-        /// or <paramref name="largeBufferMultiple"/> is not a positive number,
-        /// or <paramref name="maximumBufferSize"/> is less than <paramref name="blockSize"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="maximumBufferSize"/> is not a multiple of <paramref name="largeBufferMultiple"/>.</exception>
-        public RecyclableMemoryStreamManager(int blockSize, int largeBufferMultiple, int maximumBufferSize)
-            : this(blockSize, largeBufferMultiple, maximumBufferSize, false, DefaultMaxSmallPoolFreeBytes, DefaultMaxLargePoolFreeBytes) { }
-
-        /// <summary>
-        /// Initializes the memory manager with the given block requiredSize.
-        /// </summary>
-        /// <param name="blockSize">Size of each block that is pooled. Must be > 0.</param>
-        /// <param name="largeBufferMultiple">Each large buffer will be a multiple of this value.</param>
-        /// <param name="maximumBufferSize">Buffers larger than this are not pooled</param>
-        /// <param name="maximumSmallPoolFreeBytes">Maximum number of bytes to keep available in the small pool before future buffers get dropped for garbage collection</param>
-        /// <param name="maximumLargePoolFreeBytes">Maximum number of bytes to keep available in the large pool before future buffers get dropped for garbage collection</param>
-        /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="blockSize"/> is not a positive number,
-        /// or <paramref name="largeBufferMultiple"/> is not a positive number,
-        /// or <paramref name="maximumBufferSize"/> is less than <paramref name="blockSize"/>,
-        /// or <paramref name="maximumSmallPoolFreeBytes"/> is negative,
-        /// or <paramref name="maximumLargePoolFreeBytes"/> is negative.
-        /// </exception>
-        /// <exception cref="ArgumentException"><paramref name="maximumBufferSize"/> is not a multiple of <paramref name="largeBufferMultiple"/>.</exception>
-        public RecyclableMemoryStreamManager(int blockSize, int largeBufferMultiple, int maximumBufferSize, long maximumSmallPoolFreeBytes, long maximumLargePoolFreeBytes)
-            : this(blockSize, largeBufferMultiple, maximumBufferSize, false, maximumSmallPoolFreeBytes, maximumLargePoolFreeBytes) { }
-
-
-        /// <summary>
-        /// Initializes the memory manager with the given block requiredSize. This pool may have unbounded growth unless you modify <see cref="MaximumFreeSmallPoolBytes"/> and <see cref="MaximumFreeLargePoolBytes"/>.
-        /// </summary>
-        /// <param name="blockSize">Size of each block that is pooled. Must be > 0.</param>
-        /// <param name="largeBufferMultiple">Each large buffer will be a multiple/exponential of this value.</param>
-        /// <param name="maximumBufferSize">Buffers larger than this are not pooled</param>
-        /// <param name="useExponentialLargeBuffer">Switch to exponential large buffer allocation strategy</param>
-        /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="blockSize"/> is not a positive number,
-        /// or <paramref name="largeBufferMultiple"/> is not a positive number,
-        /// or <paramref name="maximumBufferSize"/> is less than <paramref name="blockSize"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="maximumBufferSize"/> is not a multiple/exponential of <paramref name="largeBufferMultiple"/>.</exception>
-        public RecyclableMemoryStreamManager(int blockSize, int largeBufferMultiple, int maximumBufferSize, bool useExponentialLargeBuffer)
-            :this(blockSize, largeBufferMultiple, maximumBufferSize, useExponentialLargeBuffer, DefaultMaxSmallPoolFreeBytes, DefaultMaxLargePoolFreeBytes)
-        {
-        }
-
-        /// <summary>
-        /// Initializes the memory manager with the given block requiredSize.
-        /// </summary>
-        /// <param name="blockSize">Size of each block that is pooled. Must be > 0.</param>
-        /// <param name="largeBufferMultiple">Each large buffer will be a multiple/exponential of this value.</param>
-        /// <param name="maximumBufferSize">Buffers larger than this are not pooled.</param>
-        /// <param name="useExponentialLargeBuffer">Switch to exponential large buffer allocation strategy.</param>
-        /// <param name="maximumSmallPoolFreeBytes">Maximum number of bytes to keep available in the small pool before future buffers get dropped for garbage collection.</param>
-        /// <param name="maximumLargePoolFreeBytes">Maximum number of bytes to keep available in the large pool before future buffers get dropped for garbage collection.</param>
-        /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="blockSize"/> is not a positive number,
-        /// or <paramref name="largeBufferMultiple"/> is not a positive number,
-        /// or <paramref name="maximumBufferSize"/> is less than <paramref name="blockSize"/>,
-        /// or <paramref name="maximumSmallPoolFreeBytes"/> is negative,
-        /// or <paramref name="maximumLargePoolFreeBytes"/> is negative.
-        /// </exception>
-        /// <exception cref="ArgumentException"><paramref name="maximumBufferSize"/> is not a multiple/exponential of <paramref name="largeBufferMultiple"/>.</exception>
-        public RecyclableMemoryStreamManager(int blockSize, int largeBufferMultiple, int maximumBufferSize, bool useExponentialLargeBuffer, long maximumSmallPoolFreeBytes, long maximumLargePoolFreeBytes)
-        {
-            if (blockSize <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(blockSize), blockSize, $"{nameof(blockSize)} must be a positive number");
-            }
-
-            if (largeBufferMultiple <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(largeBufferMultiple), $"{nameof(largeBufferMultiple)} must be a positive number");
-            }
-
-            if (maximumBufferSize < blockSize)
-            {
-                throw new ArgumentOutOfRangeException(nameof(maximumBufferSize), $"{nameof(maximumBufferSize)} must be at least {nameof(blockSize)}");
-            }
-
-            if (maximumSmallPoolFreeBytes < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(maximumSmallPoolFreeBytes), $"{nameof(maximumSmallPoolFreeBytes)} must be non-negative");
-            }
-
-            if (maximumLargePoolFreeBytes < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(maximumLargePoolFreeBytes), $"{nameof(maximumLargePoolFreeBytes)} must be non-negative");
-            }
-
-            this.BlockSize = blockSize;
-            this.LargeBufferMultiple = largeBufferMultiple;
-            this.MaximumBufferSize = maximumBufferSize;
-            this.UseExponentialLargeBuffer = useExponentialLargeBuffer;
-            this.MaximumFreeSmallPoolBytes = maximumSmallPoolFreeBytes;
-            this.MaximumFreeLargePoolBytes = maximumLargePoolFreeBytes;
-
-            if (!this.IsLargeBufferSize(maximumBufferSize))
-            {
-                throw new ArgumentException(
-                    $"{nameof(maximumBufferSize)} is not {(this.UseExponentialLargeBuffer ? "an exponential" : "a multiple")} of {nameof(largeBufferMultiple)}.",
-                    nameof(maximumBufferSize));
-            }
-
-            this.smallPool = new ConcurrentStack<byte[]>();
-            var numLargePools = useExponentialLargeBuffer
-                                    ? ((int)Math.Log(maximumBufferSize / largeBufferMultiple, 2) + 1)
-                                    : (maximumBufferSize / largeBufferMultiple);
-
-            // +1 to store size of bytes in use that are too large to be pooled
-            this.largeBufferInUseSize = new long[numLargePools + 1];
-            this.largeBufferFreeSize = new long[numLargePools];
-
-            this.largePools = new ConcurrentStack<byte[]>[numLargePools];
-
-            for (var i = 0; i < this.largePools.Length; ++i)
-            {
-                this.largePools[i] = new ConcurrentStack<byte[]>();
-            }
-
-            Events.Writer.MemoryStreamManagerInitialized(blockSize, largeBufferMultiple, maximumBufferSize);
-        }
-
-        /// <summary>
-        /// The size of each block. It must be set at creation and cannot be changed.
-        /// </summary>
-        public int BlockSize { get; }
-
-        /// <summary>
-        /// All buffers are multiples/exponentials of this number. It must be set at creation and cannot be changed.
-        /// </summary>
-        public int LargeBufferMultiple { get; }
-
-        /// <summary>
-        /// Use multiple large buffer allocation strategy. It must be set at creation and cannot be changed.
-        /// </summary>
-        public bool UseMultipleLargeBuffer => !this.UseExponentialLargeBuffer;
-
-        /// <summary>
-        /// Use exponential large buffer allocation strategy. It must be set at creation and cannot be changed.
-        /// </summary>
-        public bool UseExponentialLargeBuffer { get; }
-
-        /// <summary>
-        /// Gets the maximum buffer size.
-        /// </summary>
-        /// <remarks>Any buffer that is returned to the pool that is larger than this will be
-        /// discarded and garbage collected.</remarks>
-        public int MaximumBufferSize { get; }
+        public Options Settings => this.options;
 
         /// <summary>
         /// Number of bytes in small pool not currently in use.
@@ -319,54 +153,192 @@ namespace Microsoft.IO
         }
 
         /// <summary>
-        /// How many bytes of small free blocks to allow before we start dropping
-        /// those returned to us.
+        /// Parameters for customizing the behavior of <see cref="RecyclableMemoryStreamManager"/>
         /// </summary>
-        /// <remarks>The default value is 0, meaning the pool is unbounded.</remarks>
-        public long MaximumFreeSmallPoolBytes { get; set; }
+        public class Options
+        {
+            /// <summary>
+            /// Gets or sets the size of the pooled blocks. This must be greater than 0.
+            /// </summary>
+            /// <remarks>The default size 131,072 (128KB)</remarks>
+            public int BlockSize { get; set; } = DefaultBlockSize;
+
+            /// <summary>
+            /// Each large buffer will be a multiple exponential of this value
+            /// </summary>
+            /// <remarks>The default value is 1,048,576 (1MB)</remarks>
+            public int LargeBufferMultiple { get; set; } = DefaultLargeBufferMultiple;
+
+            /// <summary>
+            /// Buffer beyond this length are not pooled.
+            /// </summary>
+            /// <remarks>The default value is 134,217,728 (128MB)</remarks>
+            public int MaximumBufferSize { get; set; } = DefaultMaximumBufferSize;
+
+            /// <summary>
+            /// Maximum number of bytes to keep available in the small pool.
+            /// </summary>
+            /// <remarks>
+            /// <para>Trying to return buffers to the pool beyond this limit will result in them being garbage collected.</para>
+            /// <para>The default value is 0, but all users should set a reasonable value depending on your application's memory requirements.</para>
+            /// </remarks>
+            public long MaximumSmallPoolFreeBytes { get; set; }
+
+            /// <summary>
+            /// Maximum number of bytes to keep available in the large pools.
+            /// </summary>
+            /// <remarks>
+            /// <para>Trying to return buffers to the pool beyond this limit will result in them being garbage collected.</para>
+            /// <para>The default value is 0, but all users should set a reasonable value depending on your application's memory requirements.</para>
+            /// </remarks>
+            public long MaximumLargePoolFreeBytes { get; set; }
+
+            /// <summary>
+            /// Whether to use the exponential allocation strategy (see documentation).
+            /// </summary>
+            /// <remarks>The default value is false.</remarks>
+            public bool UseExponentialLargeBuffer { get; set; } = false;
+
+            /// <summary>
+            /// Maximum stream capacity in bytes. Attempts to set a larger capacity will
+            /// result in an exception.
+            /// </summary>
+            /// <remarks>The default value of 0 indicates no limit.</remarks>
+            public long MaximumStreamCapacity { get; set; } = 0;
+
+            /// <summary>
+            /// Whether to save call stacks for stream allocations. This can help in debugging.
+            /// It should NEVER be turned on generally in production.
+            /// </summary>
+            public bool GenerateCallStacks { get; set; } = false;
+
+            /// <summary>
+            /// Whether dirty buffers can be immediately returned to the buffer pool.
+            /// </summary>
+            /// <remarks>
+            /// <para>
+            /// When <see cref="RecyclableMemoryStream.GetBuffer"/> is called on a stream and creates a single large buffer, if this setting is enabled, the other blocks will be returned
+            /// to the buffer pool immediately.
+            /// </para>
+            /// <para>
+            /// Note when enabling this setting that the user is responsible for ensuring that any buffer previously
+            /// retrieved from a stream which is subsequently modified is not used after modification (as it may no longer
+            /// be valid).
+            /// </para>
+            /// </remarks>
+            public bool AggressiveBufferReturn { get; set; } = false;
+
+            /// <summary>
+            /// Causes an exception to be thrown if <see cref="RecyclableMemoryStream.ToArray"/> is ever called.
+            /// </summary>
+            /// <remarks>Calling <see cref="RecyclableMemoryStream.ToArray"/> defeats the purpose of a pooled buffer. Use this property to discover code that is calling <see cref="RecyclableMemoryStream.ToArray"/>. If this is
+            /// set and <see cref="RecyclableMemoryStream.ToArray"/> is called, a <c>NotSupportedException</c> will be thrown.</remarks>
+            public bool ThrowExceptionOnToArray { get; set; } = false;
+
+            /// <summary>
+            /// Zero out buffers on allocation and before returning them to the pool.
+            /// </summary>
+            /// <remarks>Setting this to true causes a performance hit and should only be set if one wants to avoid accidental data leaks.</remarks>
+            public bool ZeroOutBuffer { get; set; } = false;
+
+            /// <summary>
+            /// Creates a new <see cref="Options"/> object.
+            /// </summary>
+            public Options()
+            {
+
+            }
+
+            /// <summary>
+            /// Creates a new <see cref="Options"/> object with the most common options.
+            /// </summary>
+            /// <param name="blockSize">Size of the blocks in the small pool.</param>
+            /// <param name="largeBufferMultiple">Size of the large buffer multiple</param>
+            /// <param name="maximumBufferSize">Maximum poolable buffer size.</param>
+            /// <param name="maximumSmallPoolFreeBytes">Maximum bytes to hold in the small pool.</param>
+            /// <param name="maximumLargePoolFreeBytes">Maximum bytes to hold in each of the large pools.</param>
+            public Options(int blockSize, int largeBufferMultiple, int maximumBufferSize, long maximumSmallPoolFreeBytes, long maximumLargePoolFreeBytes)
+            {
+                this.BlockSize = blockSize;
+                this.LargeBufferMultiple = largeBufferMultiple;
+                this.MaximumBufferSize = maximumBufferSize;
+                this.MaximumSmallPoolFreeBytes = maximumSmallPoolFreeBytes;
+                this.MaximumLargePoolFreeBytes = maximumLargePoolFreeBytes;
+            }
+        }
 
         /// <summary>
-        /// How many bytes of large free buffers to allow before we start dropping
-        /// those returned to us.
+        /// Initializes the memory manager with the default block/buffer specifications. This pool may have unbounded growth unless you modify <see cref="Options"/>.
         /// </summary>
-        /// <remarks>The default value is 0, meaning the pool is unbounded.</remarks>
-        public long MaximumFreeLargePoolBytes { get; set; }
+        public RecyclableMemoryStreamManager()
+            : this(new Options()) { }
+
 
         /// <summary>
-        /// Maximum stream capacity in bytes. Attempts to set a larger capacity will
-        /// result in an exception.
+        /// Initializes the memory manager with the given block requiredSize.
         /// </summary>
-        /// <remarks>A value of 0 indicates no limit.</remarks>
-        public long MaximumStreamCapacity { get; set; }
+        /// <param name="options">Object specifying options for stream behavior.</param>
+        /// <exception cref="InvalidOperationException">
+        /// <paramref name="options.BlockSize"/> is not a positive number,
+        /// or <paramref name="options.LargeBufferMultiple"/> is not a positive number,
+        /// or <paramref name="options.MaximumBufferSize"/> is less than options.BlockSize,
+        /// or <paramref name="options.MaximumSmallPoolFreeBytes"/> is negative,
+        /// or <paramref name="options.MaximumLargePoolFreeBytes"/> is negative,
+        /// or <paramref name="options.MaximumBufferSize"/> is not a multiple/exponential of <paramref name="options.LargeBufferMultiple"/>.
+        /// </exception>
+        public RecyclableMemoryStreamManager(Options options)
+        {
+            if (options.BlockSize <= 0)
+            {
+                throw new InvalidOperationException($"{nameof(options.BlockSize)} must be a positive number");
+            }
 
-        /// <summary>
-        /// Whether to save callstacks for stream allocations. This can help in debugging.
-        /// It should NEVER be turned on generally in production.
-        /// </summary>
-        public bool GenerateCallStacks { get; set; }
+            if (options.LargeBufferMultiple <= 0)
+            {
+                throw new InvalidOperationException($"{nameof(options.LargeBufferMultiple)} must be a positive number");
+            }
 
-        /// <summary>
-        /// Whether dirty buffers can be immediately returned to the buffer pool.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// When <see cref="RecyclableMemoryStream.GetBuffer"/> is called on a stream and creates a single large buffer, if this setting is enabled, the other blocks will be returned
-        /// to the buffer pool immediately.
-        /// </para>
-        /// <para>
-        /// Note when enabling this setting that the user is responsible for ensuring that any buffer previously
-        /// retrieved from a stream which is subsequently modified is not used after modification (as it may no longer
-        /// be valid).
-        /// </para>
-        /// </remarks>
-        public bool AggressiveBufferReturn { get; set; }
+            if (options.MaximumBufferSize < options.BlockSize)
+            {
+                throw new InvalidOperationException($"{nameof(options.MaximumBufferSize)} must be at least {nameof(options.BlockSize)}");
+            }
 
-        /// <summary>
-        /// Causes an exception to be thrown if <see cref="RecyclableMemoryStream.ToArray"/> is ever called.
-        /// </summary>
-        /// <remarks>Calling <see cref="RecyclableMemoryStream.ToArray"/> defeats the purpose of a pooled buffer. Use this property to discover code that is calling <see cref="RecyclableMemoryStream.ToArray"/>. If this is
-        /// set and <see cref="RecyclableMemoryStream.ToArray"/> is called, a <c>NotSupportedException</c> will be thrown.</remarks>
-        public bool ThrowExceptionOnToArray { get; set; }
+            if (options.MaximumSmallPoolFreeBytes < 0)
+            {
+                throw new InvalidOperationException($"{nameof(options.MaximumSmallPoolFreeBytes)} must be non-negative");
+            }
+
+            if (options.MaximumLargePoolFreeBytes < 0)
+            {
+                throw new InvalidOperationException($"{nameof(options.MaximumLargePoolFreeBytes)} must be non-negative");
+            }
+
+            this.options = options;
+
+            if (!this.IsLargeBufferSize(options.MaximumBufferSize))
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(options.MaximumBufferSize)} is not {(options.UseExponentialLargeBuffer ? "an exponential" : "a multiple")} of {nameof(options.LargeBufferMultiple)}.");
+            }
+
+            this.smallPool = new ConcurrentStack<byte[]>();
+            var numLargePools = options.UseExponentialLargeBuffer
+                                    ? ((int)Math.Log(options.MaximumBufferSize / options.LargeBufferMultiple, 2) + 1)
+                                    : (options.MaximumBufferSize / options.LargeBufferMultiple);
+
+            // +1 to store size of bytes in use that are too large to be pooled
+            this.largeBufferInUseSize = new long[numLargePools + 1];
+            this.largeBufferFreeSize = new long[numLargePools];
+
+            this.largePools = new ConcurrentStack<byte[]>[numLargePools];
+
+            for (var i = 0; i < this.largePools.Length; ++i)
+            {
+                this.largePools[i] = new ConcurrentStack<byte[]>();
+            }
+
+            Events.Writer.MemoryStreamManagerInitialized(options.BlockSize, options.LargeBufferMultiple, options.MaximumBufferSize);
+        }
 
         /// <summary>
         /// Removes and returns a single block from the pool.
@@ -374,22 +346,22 @@ namespace Microsoft.IO
         /// <returns>A <c>byte[]</c> array.</returns>
         internal byte[] GetBlock()
         {
-            Interlocked.Add(ref this.smallPoolInUseSize, this.BlockSize);
+            Interlocked.Add(ref this.smallPoolInUseSize, this.options.BlockSize);
 
-            if (!this.smallPool.TryPop(out byte[] block))
+            if (!this.smallPool.TryPop(out byte[]? block))
             {
                 // We'll add this back to the pool when the stream is disposed
                 // (unless our free pool is too large)
-#if NET5_0_OR_GREATER
-                block = GC.AllocateUninitializedArray<byte>(this.BlockSize);
+#if NET6_0_OR_GREATER
+                block = this.options.ZeroOutBuffer ? GC.AllocateArray<byte>(this.options.BlockSize) : GC.AllocateUninitializedArray<byte>(this.options.BlockSize);
 #else
-                block = new byte[this.BlockSize];
+                block = new byte[this.options.BlockSize];
 #endif
-                ReportBlockCreated();
+                this.ReportBlockCreated();
             }
             else
             {
-                Interlocked.Add(ref this.smallPoolFreeSize, -this.BlockSize);
+                Interlocked.Add(ref this.smallPoolFreeSize, -this.options.BlockSize);
             }
 
             return block;
@@ -403,28 +375,28 @@ namespace Microsoft.IO
         /// <param name="id">Unique ID for the stream.</param>
         /// <param name="tag">The tag of the stream returning this buffer, for logging if necessary.</param>
         /// <returns>A buffer of at least the required size.</returns>
-        /// <exception cref="System.OutOfMemoryException">Requested array size is larger than the maximum allowed.</exception>
-        internal byte[] GetLargeBuffer(long requiredSize, Guid id, string tag)
+        /// <exception cref="OutOfMemoryException">Requested array size is larger than the maximum allowed.</exception>
+        internal byte[] GetLargeBuffer(long requiredSize, Guid id, string? tag)
         {
+            requiredSize = this.RoundToLargeBufferSize(requiredSize);
+
             if (requiredSize > MaxArrayLength)
             {
-                throw new OutOfMemoryException($"Requested size exceeds maximum array length of {MaxArrayLength}.");
+                throw new OutOfMemoryException($"Required buffer size exceeds maximum array length of {MaxArrayLength}.");
             }
-
-            requiredSize = this.RoundToLargeBufferSize(requiredSize);
 
             var poolIndex = this.GetPoolIndex(requiredSize);
 
             bool createdNew = false;
             bool pooled = true;
-            string callStack = null;
+            string? callStack = null;
 
-            byte[] buffer;
+            byte[]? buffer;
             if (poolIndex < this.largePools.Length)
             {
                 if (!this.largePools[poolIndex].TryPop(out buffer))
                 {
-                    buffer = AllocateArray(requiredSize);
+                    buffer = AllocateArray(requiredSize, this.options.ZeroOutBuffer);
                     createdNew = true;
                 }
                 else
@@ -437,12 +409,12 @@ namespace Microsoft.IO
                 // Buffer is too large to pool. They get a new buffer.
 
                 // We still want to track the size, though, and we've reserved a slot
-                // in the end of the inuse array for nonpooled bytes in use.
+                // in the end of the in-use array for non-pooled bytes in use.
                 poolIndex = this.largeBufferInUseSize.Length - 1;
 
                 // We still want to round up to reduce heap fragmentation.
-                buffer = AllocateArray(requiredSize);
-                if (this.GenerateCallStacks)
+                buffer = AllocateArray(requiredSize, this.options.ZeroOutBuffer);
+                if (this.options.GenerateCallStacks)
                 {
                     // Grab the stack -- we want to know who requires such large buffers
                     callStack = Environment.StackTrace;
@@ -454,15 +426,15 @@ namespace Microsoft.IO
             Interlocked.Add(ref this.largeBufferInUseSize[poolIndex], buffer.Length);
             if (createdNew)
             {
-                ReportLargeBufferCreated(id, tag, requiredSize, pooled: pooled, callStack);
+                this.ReportLargeBufferCreated(id, tag, requiredSize, pooled: pooled, callStack);
             }
 
             return buffer;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            static byte[] AllocateArray(long requiredSize) =>
-#if NET5_0_OR_GREATER
-                GC.AllocateUninitializedArray<byte>((int)requiredSize);
+            static byte[] AllocateArray(long requiredSize, bool zeroInitializeArray) =>
+#if NET6_0_OR_GREATER
+                zeroInitializeArray ? GC.AllocateArray<byte>((int)requiredSize) : GC.AllocateUninitializedArray<byte>((int)requiredSize);
 #else
                 new byte[requiredSize];
 #endif
@@ -470,34 +442,34 @@ namespace Microsoft.IO
 
         private long RoundToLargeBufferSize(long requiredSize)
         {
-            if (this.UseExponentialLargeBuffer)
+            if (this.options.UseExponentialLargeBuffer)
             {
                 long pow = 1;
-                while (this.LargeBufferMultiple * pow < requiredSize)
+                while (this.options.LargeBufferMultiple * pow < requiredSize)
                 {
                     pow <<= 1;
                 }
-                return this.LargeBufferMultiple * pow;
+                return this.options.LargeBufferMultiple * pow;
             }
             else
             {
-                return ((requiredSize + this.LargeBufferMultiple - 1) / this.LargeBufferMultiple) * this.LargeBufferMultiple;
+                return ((requiredSize + this.options.LargeBufferMultiple - 1) / this.options.LargeBufferMultiple) * this.options.LargeBufferMultiple;
             }
         }
 
         private bool IsLargeBufferSize(int value)
         {
-            return (value != 0) && (this.UseExponentialLargeBuffer
-                                        ? (value == RoundToLargeBufferSize(value))
-                                        : (value % this.LargeBufferMultiple) == 0);
+            return (value != 0) && (this.options.UseExponentialLargeBuffer
+                                        ? (value == this.RoundToLargeBufferSize(value))
+                                        : (value % this.options.LargeBufferMultiple) == 0);
         }
 
         private int GetPoolIndex(long length)
         {
-            if (this.UseExponentialLargeBuffer)
+            if (this.options.UseExponentialLargeBuffer)
             {
                 int index = 0;
-                while ((this.LargeBufferMultiple << index) < length)
+                while ((this.options.LargeBufferMultiple << index) < length)
                 {
                     ++index;
                 }
@@ -505,7 +477,7 @@ namespace Microsoft.IO
             }
             else
             {
-                return (int)(length / this.LargeBufferMultiple - 1);
+                return (int)(length / this.options.LargeBufferMultiple - 1);
             }
         }
 
@@ -516,8 +488,8 @@ namespace Microsoft.IO
         /// <param name="id">Unique stream ID.</param>
         /// <param name="tag">The tag of the stream returning this buffer, for logging if necessary.</param>
         /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is null.</exception>
-        /// <exception cref="ArgumentException"><c>buffer.Length</c> is not a multiple/exponential of <see cref="LargeBufferMultiple"/> (it did not originate from this pool).</exception>
-        internal void ReturnLargeBuffer(byte[] buffer, Guid id, string tag)
+        /// <exception cref="ArgumentException"><c>buffer.Length</c> is not a multiple/exponential of <see cref="Options.LargeBufferMultiple"/> (it did not originate from this pool).</exception>
+        internal void ReturnLargeBuffer(byte[] buffer, Guid id, string? tag)
         {
             if (buffer == null)
             {
@@ -527,31 +499,31 @@ namespace Microsoft.IO
             if (!this.IsLargeBufferSize(buffer.Length))
             {
                 throw new ArgumentException($"{nameof(buffer)} did not originate from this memory manager. The size is not " +
-                                            $"{(this.UseExponentialLargeBuffer ? "an exponential" : "a multiple")} of {this.LargeBufferMultiple}.");
+                                            $"{(this.options.UseExponentialLargeBuffer ? "an exponential" : "a multiple")} of {this.options.LargeBufferMultiple}.");
             }
 
+            this.ZeroOutMemoryIfEnabled(buffer);
             var poolIndex = this.GetPoolIndex(buffer.Length);
-
             if (poolIndex < this.largePools.Length)
             {
-                if ((this.largePools[poolIndex].Count + 1) * buffer.Length <= this.MaximumFreeLargePoolBytes ||
-                    this.MaximumFreeLargePoolBytes == 0)
+                if ((this.largePools[poolIndex].Count + 1) * buffer.Length <= this.options.MaximumLargePoolFreeBytes ||
+                    this.options.MaximumLargePoolFreeBytes == 0)
                 {
                     this.largePools[poolIndex].Push(buffer);
                     Interlocked.Add(ref this.largeBufferFreeSize[poolIndex], buffer.Length);
                 }
                 else
                 {
-                    ReportBufferDiscarded(id, tag, Events.MemoryStreamBufferType.Large, Events.MemoryStreamDiscardReason.EnoughFree);
+                    this.ReportBufferDiscarded(id, tag, Events.MemoryStreamBufferType.Large, Events.MemoryStreamDiscardReason.EnoughFree);
                 }
             }
             else
             {
-                // This is a non-poolable buffer, but we still want to track its size for inuse
-                // analysis. We have space in the inuse array for this.
+                // This is a non-poolable buffer, but we still want to track its size for in-use
+                // analysis. We have space in the InUse array for this.
                 poolIndex = this.largeBufferInUseSize.Length - 1;
 
-                ReportBufferDiscarded(id, tag, Events.MemoryStreamBufferType.Large, Events.MemoryStreamDiscardReason.TooLarge);
+                this.ReportBufferDiscarded(id, tag, Events.MemoryStreamBufferType.Large, Events.MemoryStreamDiscardReason.TooLarge);
             }
 
             Interlocked.Add(ref this.largeBufferInUseSize[poolIndex], -buffer.Length);
@@ -565,34 +537,35 @@ namespace Microsoft.IO
         /// <param name="tag">The tag of the stream returning these blocks, for logging if necessary.</param>
         /// <exception cref="ArgumentNullException"><paramref name="blocks"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="blocks"/> contains buffers that are the wrong size (or null) for this memory manager.</exception>
-        internal void ReturnBlocks(List<byte[]> blocks, Guid id, string tag)
+        internal void ReturnBlocks(List<byte[]> blocks, Guid id, string? tag)
         {
             if (blocks == null)
             {
                 throw new ArgumentNullException(nameof(blocks));
             }
 
-            long bytesToReturn = (long)blocks.Count * (long)this.BlockSize;
+            long bytesToReturn = (long)blocks.Count * (long)this.options.BlockSize;
             Interlocked.Add(ref this.smallPoolInUseSize, -bytesToReturn);
 
             foreach (var block in blocks)
             {
-                if (block == null || block.Length != this.BlockSize)
+                if (block == null || block.Length != this.options.BlockSize)
                 {
-                    throw new ArgumentException($"{nameof(blocks)} contains buffers that are not {nameof(BlockSize)} in length.", nameof(blocks));
+                    throw new ArgumentException($"{nameof(blocks)} contains buffers that are not {nameof(this.options.BlockSize)} in length.", nameof(blocks));
                 }
             }
 
             foreach (var block in blocks)
             {
-                if (this.MaximumFreeSmallPoolBytes == 0 || this.SmallPoolFreeSize < this.MaximumFreeSmallPoolBytes)
+                this.ZeroOutMemoryIfEnabled(block);
+                if (this.options.MaximumSmallPoolFreeBytes == 0 || this.SmallPoolFreeSize < this.options.MaximumSmallPoolFreeBytes)
                 {
-                    Interlocked.Add(ref this.smallPoolFreeSize, this.BlockSize);
+                    Interlocked.Add(ref this.smallPoolFreeSize, this.options.BlockSize);
                     this.smallPool.Push(block);
                 }
                 else
                 {
-                    ReportBufferDiscarded(id, tag, Events.MemoryStreamBufferType.Small, Events.MemoryStreamDiscardReason.EnoughFree);
+                    this.ReportBufferDiscarded(id, tag, Events.MemoryStreamBufferType.Small, Events.MemoryStreamDiscardReason.EnoughFree);
                     break;
                 }
             }
@@ -606,9 +579,9 @@ namespace Microsoft.IO
         /// <param name="tag">The tag of the stream returning this, for logging if necessary.</param>
         /// <exception cref="ArgumentNullException"><paramref name="block"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="block"/> is the wrong size for this memory manager.</exception>
-        internal void ReturnBlock(byte[] block, Guid id, string tag)
+        internal void ReturnBlock(byte[] block, Guid id, string? tag)
         {
-            var bytesToReturn = this.BlockSize;
+            var bytesToReturn = this.options.BlockSize;
             Interlocked.Add(ref this.smallPoolInUseSize, -bytesToReturn);
 
             if (block == null)
@@ -616,19 +589,32 @@ namespace Microsoft.IO
                 throw new ArgumentNullException(nameof(block));
             }
 
-            if (block.Length != this.BlockSize)
+            if (block.Length != this.options.BlockSize)
             {
-                throw new ArgumentException($"{nameof(block)} is not not {nameof(BlockSize)} in length.");
+                throw new ArgumentException($"{nameof(block)} is not not {nameof(this.options.BlockSize)} in length.");
             }
-
-            if (this.MaximumFreeSmallPoolBytes == 0 || this.SmallPoolFreeSize < this.MaximumFreeSmallPoolBytes)
+            this.ZeroOutMemoryIfEnabled(block);
+            if (this.options.MaximumSmallPoolFreeBytes == 0 || this.SmallPoolFreeSize < this.options.MaximumSmallPoolFreeBytes)
             {
-                Interlocked.Add(ref this.smallPoolFreeSize, this.BlockSize);
+                Interlocked.Add(ref this.smallPoolFreeSize, this.options.BlockSize);
                 this.smallPool.Push(block);
             }
             else
             {
-                ReportBufferDiscarded(id, tag, Events.MemoryStreamBufferType.Small, Events.MemoryStreamDiscardReason.EnoughFree);
+                this.ReportBufferDiscarded(id, tag, Events.MemoryStreamBufferType.Small, Events.MemoryStreamDiscardReason.EnoughFree);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ZeroOutMemoryIfEnabled(byte[] buffer)
+        {
+            if (this.options.ZeroOutBuffer)
+            {
+#if NET6_0_OR_GREATER
+                Array.Clear(buffer);
+#else
+                Array.Clear(buffer, 0, buffer.Length);
+#endif
             }
         }
 
@@ -638,7 +624,7 @@ namespace Microsoft.IO
             this.BlockCreated?.Invoke(this, new BlockCreatedEventArgs(this.smallPoolInUseSize));
         }
 
-        internal void ReportLargeBufferCreated(Guid id, string tag, long requiredSize, bool pooled, string callStack)
+        internal void ReportLargeBufferCreated(Guid id, string? tag, long requiredSize, bool pooled, string? callStack)
         {
             if (pooled)
             {
@@ -651,7 +637,7 @@ namespace Microsoft.IO
             this.LargeBufferCreated?.Invoke(this, new LargeBufferCreatedEventArgs(id, tag, requiredSize, this.LargePoolInUseSize, pooled, callStack));
         }
 
-        internal void ReportBufferDiscarded(Guid id, string tag, Events.MemoryStreamBufferType bufferType, Events.MemoryStreamDiscardReason reason)
+        internal void ReportBufferDiscarded(Guid id, string? tag, Events.MemoryStreamBufferType bufferType, Events.MemoryStreamDiscardReason reason)
         {
             Events.Writer.MemoryStreamDiscardBuffer(id, tag, bufferType, reason,
                 this.SmallBlocksFree, this.smallPoolFreeSize, this.smallPoolInUseSize,
@@ -659,25 +645,25 @@ namespace Microsoft.IO
             this.BufferDiscarded?.Invoke(this, new BufferDiscardedEventArgs(id, tag, bufferType, reason));
         }
 
-        internal void ReportStreamCreated(Guid id, string tag, long requestedSize, long actualSize)
+        internal void ReportStreamCreated(Guid id, string? tag, long requestedSize, long actualSize)
         {
             Events.Writer.MemoryStreamCreated(id, tag, requestedSize, actualSize);
             this.StreamCreated?.Invoke(this, new StreamCreatedEventArgs(id, tag, requestedSize, actualSize));
         }
 
-        internal void ReportStreamDisposed(Guid id, string tag, string allocationStack, string disposeStack)
+        internal void ReportStreamDisposed(Guid id, string? tag, TimeSpan lifetime, string? allocationStack, string? disposeStack)
         {
-            Events.Writer.MemoryStreamDisposed(id, tag, allocationStack, disposeStack);
-            this.StreamDisposed?.Invoke(this, new StreamDisposedEventArgs(id, tag, allocationStack, disposeStack));
+            Events.Writer.MemoryStreamDisposed(id, tag, (long)lifetime.TotalMilliseconds, allocationStack, disposeStack);
+            this.StreamDisposed?.Invoke(this, new StreamDisposedEventArgs(id, tag, lifetime, allocationStack, disposeStack));
         }
 
-        internal void ReportStreamDoubleDisposed(Guid id, string tag, string allocationStack, string disposeStack1, string disposeStack2)
+        internal void ReportStreamDoubleDisposed(Guid id, string? tag, string? allocationStack, string? disposeStack1, string? disposeStack2)
         {
             Events.Writer.MemoryStreamDoubleDispose(id, tag, allocationStack, disposeStack1, disposeStack2);
-            this.StreamDoubleDisposed?.Invoke(this, new StreamDoubleDisposedEventArgs(id, tag, allocationStack,disposeStack1, disposeStack2));
+            this.StreamDoubleDisposed?.Invoke(this, new StreamDoubleDisposedEventArgs(id, tag, allocationStack, disposeStack1, disposeStack2));
         }
 
-        internal void ReportStreamFinalized(Guid id, string tag, string allocationStack)
+        internal void ReportStreamFinalized(Guid id, string? tag, string? allocationStack)
         {
             Events.Writer.MemoryStreamFinalized(id, tag, allocationStack);
             this.StreamFinalized?.Invoke(this, new StreamFinalizedEventArgs(id, tag, allocationStack));
@@ -688,16 +674,16 @@ namespace Microsoft.IO
             this.StreamLength?.Invoke(this, new StreamLengthEventArgs(bytes));
         }
 
-        internal void ReportStreamToArray(Guid id, string tag, string stack, long length)
+        internal void ReportStreamToArray(Guid id, string? tag, string? stack, long length)
         {
             Events.Writer.MemoryStreamToArray(id, tag, stack, length);
             this.StreamConvertedToArray?.Invoke(this, new StreamConvertedToArrayEventArgs(id, tag, stack, length));
         }
 
-        internal void ReportStreamOverCapacity(Guid id, string tag, long requestedCapacity, string allocationStack)
+        internal void ReportStreamOverCapacity(Guid id, string? tag, long requestedCapacity, string? allocationStack)
         {
-            Events.Writer.MemoryStreamOverCapacity(id, tag, requestedCapacity, this.MaximumStreamCapacity, allocationStack);
-            this.StreamOverCapacity?.Invoke(this, new StreamOverCapacityEventArgs(id, tag, requestedCapacity, this.MaximumStreamCapacity, allocationStack));
+            Events.Writer.MemoryStreamOverCapacity(id, tag, requestedCapacity, this.options.MaximumStreamCapacity, allocationStack);
+            this.StreamOverCapacity?.Invoke(this, new StreamOverCapacityEventArgs(id, tag, requestedCapacity, this.options.MaximumStreamCapacity, allocationStack));
         }
 
         internal void ReportUsageReport()
@@ -706,114 +692,84 @@ namespace Microsoft.IO
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with no tag and a default initial capacity.
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with no tag and a default initial capacity.
         /// </summary>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream()
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream()
         {
             return new RecyclableMemoryStream(this);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with no tag and a default initial capacity.
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with no tag and a default initial capacity.
         /// </summary>
         /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(Guid id)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(Guid id)
         {
             return new RecyclableMemoryStream(this, id);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and a default initial capacity.
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and a default initial capacity.
         /// </summary>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(string tag)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(string? tag)
         {
             return new RecyclableMemoryStream(this, tag);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and a default initial capacity.
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and a default initial capacity.
         /// </summary>
         /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(Guid id, string tag)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(Guid id, string? tag)
         {
             return new RecyclableMemoryStream(this, id, tag);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and at least the given capacity.
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and at least the given capacity.
         /// </summary>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
         /// <param name="requiredSize">The minimum desired capacity for the stream.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(string tag, int requiredSize)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(string? tag, long requiredSize)
         {
             return new RecyclableMemoryStream(this, tag, requiredSize);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and at least the given capacity.
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and at least the given capacity.
         /// </summary>
         /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
         /// <param name="requiredSize">The minimum desired capacity for the stream.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(Guid id, string tag, int requiredSize)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(Guid id, string? tag, long requiredSize)
         {
             return new RecyclableMemoryStream(this, id, tag, requiredSize);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and at least the given capacity.
-        /// </summary>
-        /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
-        /// <param name="tag">A tag which can be used to track the source of the stream.</param>
-        /// <param name="requiredSize">The minimum desired capacity for the stream.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(Guid id, string tag, long requiredSize)
-        {
-            return new RecyclableMemoryStream(this, id, tag, requiredSize);
-        }
-
-        /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and at least the given capacity, possibly using
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and at least the given capacity, possibly using
         /// a single contiguous underlying buffer.
         /// </summary>
-        /// <remarks>Retrieving a <c>MemoryStream</c> which provides a single contiguous buffer can be useful in situations
+        /// <remarks>Retrieving a <see cref="RecyclableMemoryStream"/> which provides a single contiguous buffer can be useful in situations
         /// where the initial size is known and it is desirable to avoid copying data between the smaller underlying
-        /// buffers to a single large one. This is most helpful when you know that you will always call <see cref="RecyclableMemoryStream.GetBuffer"/> 
+        /// buffers to a single large one. This is most helpful when you know that you will always call <see cref="RecyclableMemoryStream.GetBuffer"/>
         /// on the underlying stream.</remarks>
         /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
         /// <param name="requiredSize">The minimum desired capacity for the stream.</param>
         /// <param name="asContiguousBuffer">Whether to attempt to use a single contiguous buffer.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(Guid id, string tag, int requiredSize, bool asContiguousBuffer)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(Guid id, string? tag, long requiredSize, bool asContiguousBuffer)
         {
-            return this.GetStream(id, tag, (long)requiredSize, asContiguousBuffer);
-        }
-
-        /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and at least the given capacity, possibly using
-        /// a single contiguous underlying buffer.
-        /// </summary>
-        /// <remarks>Retrieving a <c>MemoryStream</c> which provides a single contiguous buffer can be useful in situations
-        /// where the initial size is known and it is desirable to avoid copying data between the smaller underlying
-        /// buffers to a single large one. This is most helpful when you know that you will always call <see cref="RecyclableMemoryStream.GetBuffer"/> 
-        /// on the underlying stream.</remarks>
-        /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
-        /// <param name="tag">A tag which can be used to track the source of the stream.</param>
-        /// <param name="requiredSize">The minimum desired capacity for the stream.</param>
-        /// <param name="asContiguousBuffer">Whether to attempt to use a single contiguous buffer.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(Guid id, string tag, long requiredSize, bool asContiguousBuffer)
-        {
-            if (!asContiguousBuffer || requiredSize <= this.BlockSize)
+            if (!asContiguousBuffer || requiredSize <= this.options.BlockSize)
             {
                 return this.GetStream(id, tag, requiredSize);
             }
@@ -822,41 +778,24 @@ namespace Microsoft.IO
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and at least the given capacity, possibly using
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and at least the given capacity, possibly using
         /// a single contiguous underlying buffer.
         /// </summary>
-        /// <remarks>Retrieving a MemoryStream which provides a single contiguous buffer can be useful in situations
+        /// <remarks>Retrieving a <see cref="RecyclableMemoryStream"/> which provides a single contiguous buffer can be useful in situations
         /// where the initial size is known and it is desirable to avoid copying data between the smaller underlying
         /// buffers to a single large one. This is most helpful when you know that you will always call <see cref="RecyclableMemoryStream.GetBuffer"/>
         /// on the underlying stream.</remarks>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
         /// <param name="requiredSize">The minimum desired capacity for the stream.</param>
         /// <param name="asContiguousBuffer">Whether to attempt to use a single contiguous buffer.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(string tag, int requiredSize, bool asContiguousBuffer)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(string? tag, long requiredSize, bool asContiguousBuffer)
         {
-            return GetStream(tag, (long)requiredSize, asContiguousBuffer);
+            return this.GetStream(Guid.NewGuid(), tag, requiredSize, asContiguousBuffer);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and at least the given capacity, possibly using
-        /// a single contiguous underlying buffer.
-        /// </summary>
-        /// <remarks>Retrieving a MemoryStream which provides a single contiguous buffer can be useful in situations
-        /// where the initial size is known and it is desirable to avoid copying data between the smaller underlying
-        /// buffers to a single large one. This is most helpful when you know that you will always call <see cref="RecyclableMemoryStream.GetBuffer"/>
-        /// on the underlying stream.</remarks>
-        /// <param name="tag">A tag which can be used to track the source of the stream.</param>
-        /// <param name="requiredSize">The minimum desired capacity for the stream.</param>
-        /// <param name="asContiguousBuffer">Whether to attempt to use a single contiguous buffer.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(string tag, long requiredSize, bool asContiguousBuffer)
-        {
-            return GetStream(Guid.NewGuid(), tag, requiredSize, asContiguousBuffer);
-        }
-
-        /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and with contents copied from the provided
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and with contents copied from the provided
         /// buffer. The provided buffer is not wrapped or used after construction.
         /// </summary>
         /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
@@ -865,10 +804,10 @@ namespace Microsoft.IO
         /// <param name="buffer">The byte buffer to copy data from.</param>
         /// <param name="offset">The offset from the start of the buffer to copy from.</param>
         /// <param name="count">The number of bytes to copy from the buffer.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(Guid id, string tag, byte[] buffer, int offset, int count)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(Guid id, string? tag, byte[] buffer, int offset, int count)
         {
-            RecyclableMemoryStream stream = null;
+            RecyclableMemoryStream? stream = null;
             try
             {
                 stream = new RecyclableMemoryStream(this, id, tag, count);
@@ -884,19 +823,19 @@ namespace Microsoft.IO
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the contents copied from the provided
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the contents copied from the provided
         /// buffer. The provided buffer is not wrapped or used after construction.
         /// </summary>
         /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
         /// <param name="buffer">The byte buffer to copy data from.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(byte[] buffer)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(byte[] buffer)
         {
-            return GetStream(null, buffer, 0, buffer.Length);
+            return this.GetStream(null, buffer, 0, buffer.Length);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and with contents copied from the provided
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and with contents copied from the provided
         /// buffer. The provided buffer is not wrapped or used after construction.
         /// </summary>
         /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
@@ -904,51 +843,24 @@ namespace Microsoft.IO
         /// <param name="buffer">The byte buffer to copy data from.</param>
         /// <param name="offset">The offset from the start of the buffer to copy from.</param>
         /// <param name="count">The number of bytes to copy from the buffer.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(string tag, byte[] buffer, int offset, int count)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(string? tag, byte[] buffer, int offset, int count)
         {
-            return GetStream(Guid.NewGuid(), tag, buffer, offset, count);
+            return this.GetStream(Guid.NewGuid(), tag, buffer, offset, count);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and with contents copied from the provided
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and with contents copied from the provided
         /// buffer. The provided buffer is not wrapped or used after construction.
         /// </summary>
         /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
         /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
         /// <param name="buffer">The byte buffer to copy data from.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        [Obsolete("Use the ReadOnlySpan<byte> version of this method instead.")]
-        public MemoryStream GetStream(Guid id, string tag, Memory<byte> buffer)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(Guid id, string? tag, ReadOnlySpan<byte> buffer)
         {
-            RecyclableMemoryStream stream = null;
-            try
-            {
-                stream = new RecyclableMemoryStream(this, id, tag, buffer.Length);
-                stream.Write(buffer.Span);
-                stream.Position = 0;
-                return stream;
-            }
-            catch
-            {
-                stream?.Dispose();
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and with contents copied from the provided
-        /// buffer. The provided buffer is not wrapped or used after construction.
-        /// </summary>
-        /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
-        /// <param name="id">A unique identifier which can be used to trace usages of the stream.</param>
-        /// <param name="tag">A tag which can be used to track the source of the stream.</param>
-        /// <param name="buffer">The byte buffer to copy data from.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(Guid id, string tag, ReadOnlySpan<byte> buffer)
-        {
-            RecyclableMemoryStream stream = null;
+            RecyclableMemoryStream? stream = null;
             try
             {
                 stream = new RecyclableMemoryStream(this, id, tag, buffer.Length);
@@ -964,110 +876,83 @@ namespace Microsoft.IO
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the contents copied from the provided
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the contents copied from the provided
         /// buffer. The provided buffer is not wrapped or used after construction.
         /// </summary>
         /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
         /// <param name="buffer">The byte buffer to copy data from.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        [Obsolete("Use the ReadOnlySpan<byte> version of this method instead.")]
-        public MemoryStream GetStream(Memory<byte> buffer)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(ReadOnlySpan<byte> buffer)
         {
-            return GetStream(null, buffer);
+            return this.GetStream(null, buffer);
         }
 
         /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the contents copied from the provided
-        /// buffer. The provided buffer is not wrapped or used after construction.
-        /// </summary>
-        /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
-        /// <param name="buffer">The byte buffer to copy data from.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(ReadOnlySpan<byte> buffer)
-        {
-            return GetStream(null, buffer);
-        }
-
-        /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and with contents copied from the provided
+        /// Retrieve a new <see cref="RecyclableMemoryStream"/> object with the given tag and with contents copied from the provided
         /// buffer. The provided buffer is not wrapped or used after construction.
         /// </summary>
         /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
         /// <param name="tag">A tag which can be used to track the source of the stream.</param>
         /// <param name="buffer">The byte buffer to copy data from.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        [Obsolete("Use the ReadOnlySpan<byte> version of this method instead.")]
-        public MemoryStream GetStream(string tag, Memory<byte> buffer)
+        /// <returns>A <see cref="RecyclableMemoryStream"/>.</returns>
+        public RecyclableMemoryStream GetStream(string? tag, ReadOnlySpan<byte> buffer)
         {
-            return GetStream(Guid.NewGuid(), tag, buffer);
-        }
-
-        /// <summary>
-        /// Retrieve a new <c>MemoryStream</c> object with the given tag and with contents copied from the provided
-        /// buffer. The provided buffer is not wrapped or used after construction.
-        /// </summary>
-        /// <remarks>The new stream's position is set to the beginning of the stream when returned.</remarks>
-        /// <param name="tag">A tag which can be used to track the source of the stream.</param>
-        /// <param name="buffer">The byte buffer to copy data from.</param>
-        /// <returns>A <c>MemoryStream</c>.</returns>
-        public MemoryStream GetStream(string tag, ReadOnlySpan<byte> buffer)
-        {
-            return GetStream(Guid.NewGuid(), tag, buffer);
+            return this.GetStream(Guid.NewGuid(), tag, buffer);
         }
 
         /// <summary>
         /// Triggered when a new block is created.
         /// </summary>
-        public event EventHandler<BlockCreatedEventArgs> BlockCreated;
+        public event EventHandler<BlockCreatedEventArgs>? BlockCreated;
 
         /// <summary>
         /// Triggered when a new large buffer is created.
         /// </summary>
-        public event EventHandler<LargeBufferCreatedEventArgs> LargeBufferCreated;
+        public event EventHandler<LargeBufferCreatedEventArgs>? LargeBufferCreated;
 
         /// <summary>
         /// Triggered when a new stream is created.
         /// </summary>
-        public event EventHandler<StreamCreatedEventArgs> StreamCreated;
+        public event EventHandler<StreamCreatedEventArgs>? StreamCreated;
 
         /// <summary>
         /// Triggered when a stream is disposed.
         /// </summary>
-        public event EventHandler<StreamDisposedEventArgs> StreamDisposed;
+        public event EventHandler<StreamDisposedEventArgs>? StreamDisposed;
 
         /// <summary>
         /// Triggered when a stream is disposed of twice (an error).
         /// </summary>
-        public event EventHandler<StreamDoubleDisposedEventArgs> StreamDoubleDisposed;
+        public event EventHandler<StreamDoubleDisposedEventArgs>? StreamDoubleDisposed;
 
         /// <summary>
         /// Triggered when a stream is finalized.
         /// </summary>
-        public event EventHandler<StreamFinalizedEventArgs> StreamFinalized;
+        public event EventHandler<StreamFinalizedEventArgs>? StreamFinalized;
 
         /// <summary>
         /// Triggered when a stream is disposed to report the stream's length.
         /// </summary>
-        public event EventHandler<StreamLengthEventArgs> StreamLength;
+        public event EventHandler<StreamLengthEventArgs>? StreamLength;
 
         /// <summary>
         /// Triggered when a user converts a stream to array.
         /// </summary>
-        public event EventHandler<StreamConvertedToArrayEventArgs> StreamConvertedToArray;
+        public event EventHandler<StreamConvertedToArrayEventArgs>? StreamConvertedToArray;
 
         /// <summary>
         /// Triggered when a stream is requested to expand beyond the maximum length specified by the responsible RecyclableMemoryStreamManager.
         /// </summary>
-        public event EventHandler<StreamOverCapacityEventArgs> StreamOverCapacity;
+        public event EventHandler<StreamOverCapacityEventArgs>? StreamOverCapacity;
 
         /// <summary>
         /// Triggered when a buffer of either type is discarded, along with the reason for the discard.
         /// </summary>
-        public event EventHandler<BufferDiscardedEventArgs> BufferDiscarded;
+        public event EventHandler<BufferDiscardedEventArgs>? BufferDiscarded;
 
         /// <summary>
         /// Periodically triggered to report usage statistics.
         /// </summary>
-        public event EventHandler<UsageReportEventArgs> UsageReport;
+        public event EventHandler<UsageReportEventArgs>? UsageReport;
     }
 }

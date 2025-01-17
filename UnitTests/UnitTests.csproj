@@ -1,20 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>Microsoft.IO.RecyclableMemoryStream.UnitTests</AssemblyName>
     <RootNamespace>Microsoft.IO.UnitTests</RootNamespace>
-    <TargetFramework>net5.0</TargetFramework>
-    <DebugType>Full</DebugType> <!-- NUnit in VS2017 needs this instead of the new slimmer PDBs -->
+    <TargetFramework>net8.0</TargetFramework>
     <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
+
+    <!--NUnit2045 - Use Assert.Multiple. Not interested at this time. -->
+    <NoWarn>NUnit2045</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="nunit" Version="3.13.3" />
-    <PackageReference Include="NUnit3TestAdapter" Version="4.3.1" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.4.1" />
+    <PackageReference Include="nunit" Version="4.3.2" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.6.0" PrivateAssets="All" />      
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\src\Microsoft.IO.RecyclableMemoryStream.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Service Include="{82a7f48d-3b50-4b1e-b82e-3ada8210c358}" />
   </ItemGroup>
 </Project>

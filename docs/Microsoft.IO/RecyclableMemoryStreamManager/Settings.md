@@ -1,13 +1,14 @@
-# RecyclableMemoryStreamManager.BlockSize property
+# RecyclableMemoryStreamManager.Settings property
 
-The size of each block. It must be set at creation and cannot be changed.
+Settings for controlling the behavior of RecyclableMemoryStream
 
 ```csharp
-public int BlockSize { get; }
+public Options Settings { get; }
 ```
 
 ## See Also
 
+* class [Options](../RecyclableMemoryStreamManager.Options.md)
 * class [RecyclableMemoryStreamManager](../RecyclableMemoryStreamManager.md)
 * namespace [Microsoft.IO](../../Microsoft.IO.RecyclableMemoryStream.md)
 
